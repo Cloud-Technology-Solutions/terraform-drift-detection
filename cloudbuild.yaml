@@ -7,7 +7,7 @@ steps:
       - '-c'
       - |
         mkdir -p /root/.ssh
-        gcloud secrets versions access latest --secret=$$_SSH_KEY_SECRET > /root/.ssh/id_rsa
+        gcloud secrets versions access latest --secret=$_SSH_KEY_SECRET > /root/.ssh/id_rsa
         chmod 600 /root/.ssh/id_rsa
         ssh-keyscan github.com >> /root/.ssh/known_hosts
         ssh-keyscan gitlab.com >> /root/.ssh/known_hosts
@@ -32,7 +32,7 @@ steps:
         apk add --no-cache git jq curl bash openssh-client
         
         # Install Terragrunt
-        wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.0/terragrunt_linux_amd64 -O /usr/local/bin/terragrunt
+        wget -q https://github.com/gruntwork-io/terragrunt/releases/download/latest/terragrunt_linux_amd64 -O /usr/local/bin/terragrunt
         chmod +x /usr/local/bin/terragrunt
         
         # Parse repositories from substitution
