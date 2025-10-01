@@ -7,7 +7,7 @@ steps:
       - '-c'
       - |
         mkdir -p /root/.ssh
-        gcloud secrets versions access latest --secret=${_SSH_KEY_SECRET} > /root/.ssh/id_rsa
+        gcloud secrets versions access latest --secret=$$SSH_KEY_SECRET > /root/.ssh/id_rsa
         chmod 600 /root/.ssh/id_rsa
         ssh-keyscan github.com >> /root/.ssh/known_hosts
         ssh-keyscan gitlab.com >> /root/.ssh/known_hosts
@@ -15,6 +15,7 @@ steps:
     volumes:
       - name: 'ssh'
         path: /root/.ssh
+    secretEnv: ['SSH_KEY_SECRET']
 
   # Process repositories and detect drift
   - name: 'hashicorp/terraform:latest'
@@ -32,7 +33,12 @@ steps:
         # Install Terragrunt
         wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.0/terragrunt_linux_amd64 -O /usr/local/bin/terragrunt
         chmod +x /usr/local/bin/terragrunt
-
+        
+        # Parse repositories from substitution
+        REPOS='${_REPOSITORIES}'
+        
+        DRIFT_DETECTED=false
+        DRIFT_REPORT="/workspace/drift_report.txt"
         echo "=== Terraform/Terragrunt Drift Detection Report ===" > $DRIFT_REPORT
         echo "Execution Date: $(date)" >> $DRIFT_REPORT
         echo "" >> $DRIFT_REPORT
@@ -136,9 +142,6 @@ steps:
         path: /root/.ssh
     env:
       - 'GIT_SSH_COMMAND=ssh -i /root/.ssh/id_rsa -o UserKnownHostsFile=/root/.ssh/known_hosts'
-      - 'REPOS="${_REPOSITORIES}"'
-      - 'DRIFT_DETECTED=false'
-      - 'DRIFT_REPORT="/workspace/drift_report.txt"'
 
   # Send notification to Google Chat
   - name: 'gcr.io/cloud-builders/curl'
@@ -191,10 +194,11 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: 'N1_HIGHCPU_8'
 
 timeout: '3600s'
 
 availableSecrets:
   secretManager:
     - versionName: projects/$PROJECT_ID/secrets/ssh-private-key/versions/latest
-      env: '_SSH_KEY_SECRET'
+      env: 'SSH_KEY_SECRET'

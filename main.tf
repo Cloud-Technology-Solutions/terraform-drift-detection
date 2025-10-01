@@ -136,8 +136,8 @@ resource "google_cloudbuild_trigger" "drift_detection" {
   filename = "cloudbuild.yaml"
 
   substitutions = {
-    _REPOSITORIES        = jsonencode(var.repositories)
-    _SSH_KEY_SECRET      = google_secret_manager_secret.ssh_private_key.secret_id
+    _REPOSITORIES = jsonencode(var.repositories)
+    # _SSH_KEY_SECRET      = google_secret_manager_secret.ssh_private_key.secret_id
     _CHAT_WEBHOOK_SECRET = google_secret_manager_secret.chat_webhook.secret_id
     _PROJECT_ID          = var.project_id
   }
