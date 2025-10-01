@@ -128,8 +128,8 @@ resource "google_cloudbuild_trigger" "drift_detection" {
   service_account = google_service_account.drift_detector.id
 
   source_to_build {
-    uri       = "https://github.com/your-org/drift-detection-config" # Update with your config repo
-    ref       = "refs/heads/main"
+    uri       = "https://github.com/florin-hazi-qodea/terraform-drift-detection" # Update with your config repo
+    ref       = "refs/heads/master"
     repo_type = "GITHUB"
   }
 
