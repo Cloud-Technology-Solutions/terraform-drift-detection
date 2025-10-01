@@ -182,7 +182,7 @@ steps:
                   }
                 }, {
                   \"textParagraph\": {
-                    \"text\": \"<pre>$REPORT</pre>\"
+                    \"text\": \"<pre>\$REPORT</pre>\"
                   }
                 }, {
                   \"buttons\": [{
