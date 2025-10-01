@@ -38,9 +38,8 @@ steps:
         apk add --no-cache git jq curl bash openssh-client
         
         # Install Terragrunt
-        TERRAGRUNT_VERSION="v0.54.0"
-        echo "Installing Terragrunt ${TERRAGRUNT_VERSION}..."
-        wget -q "https://github.com/gruntwork-io/terragrunt/releases/download/${TERRAGRUNT_VERSION}/terragrunt_linux_amd64" \
+        echo "Installing Terragrunt ${_TERRAGRUNT_VERSION}..."
+        wget -q "https://github.com/gruntwork-io/terragrunt/releases/download/${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64" \
           -O /usr/local/bin/terragrunt
         chmod +x /usr/local/bin/terragrunt
         
@@ -355,9 +354,7 @@ options:
 timeout: '3600s'
 
 substitutions:
-  _SSH_KEY_SECRET: 'ssh-private-key'
-  _CHAT_WEBHOOK_SECRET: 'chat-webhook-url'
-  _REPOSITORIES: '[]'  # Should be provided as JSON array
+  _TERRAGRUNT_VERSION: "v0.54.0"
 
 availableSecrets:
   secretManager:
