@@ -164,10 +164,9 @@ steps:
       - |
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         DRIFT_STATUS=$(cat /workspace/drift_status.txt)
+        DRIFT_REPORT_CONTENT=$(cat /workspace/drift_report.txt | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
         
         if [ "$DRIFT_STATUS" = "DRIFT_DETECTED" ]; then
-          REPORT=$(cat /workspace/drift_report.txt | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-          
           curl -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d "{
             \"text\": \"?? *Terraform Drift Detected*\",
             \"cards\": [{
@@ -182,7 +181,7 @@ steps:
                   }
                 }, {
                   \"textParagraph\": {
-                    \"text\": \"<pre>\$REPORT</pre>\"
+                    \"text\": \"<pre>$DRIFT_REPORT_CONTENT</pre>\"
                   }
                 }, {
                   \"buttons\": [{
