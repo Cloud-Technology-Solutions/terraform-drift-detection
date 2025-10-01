@@ -7,7 +7,7 @@ steps:
       - '-c'
       - |
         mkdir -p /root/.ssh
-        gcloud secrets versions access latest --secret=$$SSH_KEY_SECRET > /root/.ssh/id_rsa
+        gcloud secrets versions access latest --secret=$$_SSH_KEY_SECRET > /root/.ssh/id_rsa
         chmod 600 /root/.ssh/id_rsa
         ssh-keyscan github.com >> /root/.ssh/known_hosts
         ssh-keyscan gitlab.com >> /root/.ssh/known_hosts
@@ -16,7 +16,7 @@ steps:
       - name: 'ssh'
         path: /root/.ssh
     secretEnv:
-      - 'SSH_KEY_SECRET'
+      - '_SSH_KEY_SECRET'
 
   # Process repositories and detect drift
   - name: 'hashicorp/terraform:latest'
@@ -201,5 +201,5 @@ timeout: '3600s'
 
 availableSecrets:
   secretManager:
-    - versionName: projects/$PROJECT_ID/secrets/ssh-private-key/versions/latest
-      env: 'SSH_KEY_SECRET'
+    - versionName: projects/$PROJECT_ID/secrets/terraform-drift-ssh-key/versions/latest
+      env: '_SSH_KEY_SECRET'
