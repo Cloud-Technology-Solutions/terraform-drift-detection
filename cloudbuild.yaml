@@ -43,9 +43,6 @@ steps:
           -O /usr/local/bin/terragrunt
         chmod +x /usr/local/bin/terragrunt
         
-        # Initialize variables and files
-        REPOS='${_REPOSITORIES}'
-        
         # Remove any existing flag file
         rm -f "$_DRIFT_FLAG"
         
@@ -186,7 +183,7 @@ steps:
           
           echo "" >> "$_DRIFT_REPORT"
           
-        done < <(echo "$REPOS" | jq -c '.[]')
+        done < <(echo "$_REPOSITORIES" | jq -c '.[]')
         
         # Determine final drift status
         if [ -f "$_DRIFT_FLAG" ]; then
