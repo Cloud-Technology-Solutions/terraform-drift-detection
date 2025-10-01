@@ -1,0 +1,199 @@
+steps:
+  # Setup SSH for git operations
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'setup-ssh'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        mkdir -p /root/.ssh
+        gcloud secrets versions access latest --secret=${_SSH_KEY_SECRET} > /root/.ssh/id_rsa
+        chmod 600 /root/.ssh/id_rsa
+        ssh-keyscan github.com >> /root/.ssh/known_hosts
+        ssh-keyscan gitlab.com >> /root/.ssh/known_hosts
+        ssh-keyscan bitbucket.org >> /root/.ssh/known_hosts
+    volumes:
+      - name: 'ssh'
+        path: /root/.ssh
+
+  # Process repositories and detect drift
+  - name: 'hashicorp/terraform:latest'
+    id: 'drift-detection'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        #!/bin/bash
+        set -e
+        
+        # Install required tools
+        apk add --no-cache git jq curl bash openssh-client
+        
+        # Install Terragrunt
+        wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.0/terragrunt_linux_amd64 -O /usr/local/bin/terragrunt
+        chmod +x /usr/local/bin/terragrunt
+        
+        # Parse repositories from substitution
+        REPOS='${_REPOSITORIES}'
+        
+        DRIFT_DETECTED=false
+        DRIFT_REPORT="/workspace/drift_report.txt"
+        echo "=== Terraform/Terragrunt Drift Detection Report ===" > $DRIFT_REPORT
+        echo "Execution Date: $(date)" >> $DRIFT_REPORT
+        echo "" >> $DRIFT_REPORT
+        
+        # Process each repository
+        echo "$REPOS" | jq -c '.[]' | while read repo; do
+          REPO_NAME=$(echo $repo | jq -r '.name')
+          REPO_URL=$(echo $repo | jq -r '.url')
+          REPO_BRANCH=$(echo $repo | jq -r '.branch')
+          REPO_TYPE=$(echo $repo | jq -r '.type')
+          
+          echo "Processing repository: $REPO_NAME (branch: $REPO_BRANCH, type: $REPO_TYPE)"
+          echo "" >> $DRIFT_REPORT
+          echo "## Repository: $REPO_NAME ($REPO_BRANCH)" >> $DRIFT_REPORT
+          echo "---" >> $DRIFT_REPORT
+          
+          # Clone repository
+          REPO_DIR="/workspace/repos/$REPO_NAME"
+          git clone --branch $REPO_BRANCH --depth 1 $REPO_URL $REPO_DIR
+          
+          if [ "$REPO_TYPE" = "terraform" ]; then
+            # Find all directories with main.tf
+            find $REPO_DIR -name "main.tf" -type f | while read tf_file; do
+              TF_DIR=$(dirname $tf_file)
+              echo "Checking Terraform in: $TF_DIR"
+              
+              cd $TF_DIR
+              
+              # Initialize Terraform
+              terraform init -input=false -no-color > /tmp/init.log 2>&1 || {
+                echo "  ? Init failed in $TF_DIR" >> $DRIFT_REPORT
+                cat /tmp/init.log >> $DRIFT_REPORT
+                continue
+              }
+              
+              # Run Terraform plan
+              terraform plan -detailed-exitcode -no-color -input=false > /tmp/plan.log 2>&1
+              PLAN_EXIT=$?
+              
+              if [ $PLAN_EXIT -eq 2 ]; then
+                echo "  ?? DRIFT DETECTED in $TF_DIR" >> $DRIFT_REPORT
+                echo "" >> $DRIFT_REPORT
+                grep -E "^(  [\+\-\~]|Plan:)" /tmp/plan.log >> $DRIFT_REPORT || true
+                echo "" >> $DRIFT_REPORT
+                DRIFT_DETECTED=true
+              elif [ $PLAN_EXIT -eq 0 ]; then
+                echo "  ? No drift in $TF_DIR" >> $DRIFT_REPORT
+              else
+                echo "  ? Plan failed in $TF_DIR" >> $DRIFT_REPORT
+                cat /tmp/plan.log >> $DRIFT_REPORT
+              fi
+            done
+          
+          elif [ "$REPO_TYPE" = "terragrunt" ]; then
+            # Find all directories with terragrunt.hcl
+            find $REPO_DIR -name "terragrunt.hcl" -type f | while read tg_file; do
+              TG_DIR=$(dirname $tg_file)
+              echo "Checking Terragrunt in: $TG_DIR"
+              
+              cd $TG_DIR
+              
+              # Initialize Terragrunt
+              terragrunt init --terragrunt-non-interactive > /tmp/init.log 2>&1 || {
+                echo "  ? Init failed in $TG_DIR" >> $DRIFT_REPORT
+                cat /tmp/init.log >> $DRIFT_REPORT
+                continue
+              }
+              
+              # Run Terragrunt plan
+              terragrunt plan -detailed-exitcode --terragrunt-non-interactive > /tmp/plan.log 2>&1
+              PLAN_EXIT=$?
+              
+              if [ $PLAN_EXIT -eq 2 ]; then
+                echo "  ?? DRIFT DETECTED in $TG_DIR" >> $DRIFT_REPORT
+                echo "" >> $DRIFT_REPORT
+                grep -E "^(  [\+\-\~]|Plan:)" /tmp/plan.log >> $DRIFT_REPORT || true
+                echo "" >> $DRIFT_REPORT
+                DRIFT_DETECTED=true
+              elif [ $PLAN_EXIT -eq 0 ]; then
+                echo "  ? No drift in $TG_DIR" >> $DRIFT_REPORT
+              else
+                echo "  ? Plan failed in $TG_DIR" >> $DRIFT_REPORT
+                cat /tmp/plan.log >> $DRIFT_REPORT
+              fi
+            done
+          fi
+          
+          echo "" >> $DRIFT_REPORT
+        done
+        
+        # Save drift detection status
+        if [ "$DRIFT_DETECTED" = true ]; then
+          echo "DRIFT_DETECTED" > /workspace/drift_status.txt
+        else
+          echo "NO_DRIFT" > /workspace/drift_status.txt
+        fi
+        
+        cat $DRIFT_REPORT
+    volumes:
+      - name: 'ssh'
+        path: /root/.ssh
+    env:
+      - 'GIT_SSH_COMMAND=ssh -i /root/.ssh/id_rsa -o UserKnownHostsFile=/root/.ssh/known_hosts'
+
+  # Send notification to Google Chat
+  - name: 'gcr.io/cloud-builders/curl'
+    id: 'send-notification'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
+        DRIFT_STATUS=$(cat /workspace/drift_status.txt)
+        
+        if [ "$DRIFT_STATUS" = "DRIFT_DETECTED" ]; then
+          REPORT=$(cat /workspace/drift_report.txt | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          
+          curl -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d "{
+            \"text\": \"?? *Terraform Drift Detected*\",
+            \"cards\": [{
+              \"header\": {
+                \"title\": \"Drift Detection Report\",
+                \"subtitle\": \"Issues found in infrastructure\"
+              },
+              \"sections\": [{
+                \"widgets\": [{
+                  \"textParagraph\": {
+                    \"text\": \"<font color=\\\"#FF0000\\\">Configuration drift has been detected in one or more repositories.</font>\"
+                  }
+                }, {
+                  \"textParagraph\": {
+                    \"text\": \"<pre>$REPORT</pre>\"
+                  }
+                }, {
+                  \"buttons\": [{
+                    \"textButton\": {
+                      \"text\": \"View Build Logs\",
+                      \"onClick\": {
+                        \"openLink\": {
+                          \"url\": \"https://console.cloud.google.com/cloud-build/builds;region=global?project=${_PROJECT_ID}\"
+                        }
+                      }
+                    }
+                  }]
+                }]
+              }]
+            }]
+          }"
+        else
+          curl -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d "{
+            \"text\": \"? *No Drift Detected* - All repositories are in sync with infrastructure.\"
+          }"
+        fi
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'N1_HIGHCPU_8'
+
+timeout: '3600s'
