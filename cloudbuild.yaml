@@ -43,17 +43,17 @@ steps:
         echo "$_REPOS" | jq -c '.[]' | while read repo; do
           REPO_NAME=$(echo $repo | jq -r '.name')
           REPO_URL=$(echo $repo | jq -r '.url')
-          REPO_BRANCH=$(echo $repo | jq -r '.branch')
+          _REPO_BRANCH=$(echo $repo | jq -r '.branch')
           REPO_TYPE=$(echo $repo | jq -r '.type')
           
-          echo "Processing repository: $REPO_NAME (branch: $REPO_BRANCH, type: $REPO_TYPE)"
+          echo "Processing repository: $REPO_NAME (branch: $_REPO_BRANCH, type: $REPO_TYPE)"
           echo "" >> $_DRIFT_REPORT
-          echo "## Repository: $REPO_NAME ($REPO_BRANCH)" >> $_DRIFT_REPORT
+          echo "## Repository: $REPO_NAME ($_REPO_BRANCH)" >> $_DRIFT_REPORT
           echo "---" >> $_DRIFT_REPORT
           
           # Clone repository
           REPO_DIR="/workspace/repos/$REPO_NAME"
-          git clone --branch $REPO_BRANCH --depth 1 $REPO_URL $REPO_DIR
+          git clone --branch $_REPO_BRANCH --depth 1 $REPO_URL $REPO_DIR
           
           if [ "$REPO_TYPE" = "terraform" ]; then
             # Find all directories with main.tf
