@@ -77,15 +77,15 @@ steps:
               
               # Run Terraform plan
               terraform plan -detailed-exitcode -no-color -input=false > /tmp/plan.log 2>&1
-              PLAN_EXIT=$?
+              _PLAN_EXIT=$?
               
-              if [ $PLAN_EXIT -eq 2 ]; then
+              if [ $_PLAN_EXIT -eq 2 ]; then
                 echo "  ?? DRIFT DETECTED in $_TF_DIR" >> $_DRIFT_REPORT
                 echo "" >> $_DRIFT_REPORT
                 grep -E "^(  [\+\-\~]|Plan:)" /tmp/plan.log >> $_DRIFT_REPORT || true
                 echo "" >> $_DRIFT_REPORT
                 _DRIFT_DETECTED=true
-              elif [ $PLAN_EXIT -eq 0 ]; then
+              elif [ $_PLAN_EXIT -eq 0 ]; then
                 echo "  ? No drift in $_TF_DIR" >> $_DRIFT_REPORT
               else
                 echo "  ? Plan failed in $_TF_DIR" >> $_DRIFT_REPORT
@@ -96,32 +96,32 @@ steps:
           elif [ "$_REPO_TYPE" = "terragrunt" ]; then
             # Find all directories with terragrunt.hcl
             find $_REPO_DIR -name "terragrunt.hcl" -type f | while read tg_file; do
-              TG_DIR=$(dirname $tg_file)
-              echo "Checking Terragrunt in: $TG_DIR"
+              _TG_DIR=$(dirname $tg_file)
+              echo "Checking Terragrunt in: $_TG_DIR"
               
-              cd $TG_DIR
+              cd $_TG_DIR
               
               # Initialize Terragrunt
               terragrunt init --terragrunt-non-interactive > /tmp/init.log 2>&1 || {
-                echo "  ? Init failed in $TG_DIR" >> $_DRIFT_REPORT
+                echo "  ? Init failed in $_TG_DIR" >> $_DRIFT_REPORT
                 cat /tmp/init.log >> $_DRIFT_REPORT
                 continue
               }
               
               # Run Terragrunt plan
               terragrunt plan -detailed-exitcode --terragrunt-non-interactive > /tmp/plan.log 2>&1
-              PLAN_EXIT=$?
+              _PLAN_EXIT=$?
               
-              if [ $PLAN_EXIT -eq 2 ]; then
-                echo "  ?? DRIFT DETECTED in $TG_DIR" >> $_DRIFT_REPORT
+              if [ $_PLAN_EXIT -eq 2 ]; then
+                echo "  ?? DRIFT DETECTED in $_TG_DIR" >> $_DRIFT_REPORT
                 echo "" >> $_DRIFT_REPORT
                 grep -E "^(  [\+\-\~]|Plan:)" /tmp/plan.log >> $_DRIFT_REPORT || true
                 echo "" >> $_DRIFT_REPORT
                 _DRIFT_DETECTED=true
-              elif [ $PLAN_EXIT -eq 0 ]; then
-                echo "  ? No drift in $TG_DIR" >> $_DRIFT_REPORT
+              elif [ $_PLAN_EXIT -eq 0 ]; then
+                echo "  ? No drift in $_TG_DIR" >> $_DRIFT_REPORT
               else
-                echo "  ? Plan failed in $TG_DIR" >> $_DRIFT_REPORT
+                echo "  ? Plan failed in $_TG_DIR" >> $_DRIFT_REPORT
                 cat /tmp/plan.log >> $_DRIFT_REPORT
               fi
             done
