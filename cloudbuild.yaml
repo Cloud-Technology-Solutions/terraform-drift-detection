@@ -20,11 +20,6 @@ steps:
   - name: 'hashicorp/terraform:latest'
     id: 'drift-detection'
     entrypoint: 'bash'
-    env:
-        # Parse repositories from substitution
-        - 'REPOS="${_REPOSITORIES}"'
-        - 'DRIFT_DETECTED=false'
-        - 'DRIFT_REPORT="/workspace/drift_report.txt"'
     args:
       - '-c'
       - |
@@ -141,6 +136,9 @@ steps:
         path: /root/.ssh
     env:
       - 'GIT_SSH_COMMAND=ssh -i /root/.ssh/id_rsa -o UserKnownHostsFile=/root/.ssh/known_hosts'
+      - 'REPOS="${_REPOSITORIES}"'
+      - 'DRIFT_DETECTED=false'
+      - 'DRIFT_REPORT="/workspace/drift_report.txt"'
 
   # Send notification to Google Chat
   - name: 'gcr.io/cloud-builders/curl'
