@@ -49,6 +49,12 @@ resource "google_project_iam_member" "drift_detector_secret_accessor" {
   member  = "serviceAccount:${google_service_account.drift_detector.email}"
 }
 
+resource "google_project_iam_member" "drift_detector_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.drift_detector.email}"
+}
+
 # Enable required APIs
 resource "google_project_service" "required_apis" {
   for_each = toset([
@@ -137,6 +143,7 @@ resource "google_cloudbuild_trigger" "drift_detection" {
 
   substitutions = {
     _REPOSITORIES        = jsonencode(var.repositories)
+    _SSH_KEY_SECRET      = google_secret_manager_secret.ssh_private_key.secret_id
     _CHAT_WEBHOOK_SECRET = google_secret_manager_secret.chat_webhook.secret_id
     _PROJECT_ID          = var.project_id
   }
