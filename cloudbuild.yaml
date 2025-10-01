@@ -34,9 +34,6 @@ steps:
         wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v0.54.0/terragrunt_linux_amd64 -O /usr/local/bin/terragrunt
         chmod +x /usr/local/bin/terragrunt
         
-        # Parse repositories from substitution
-        REPOS='${_REPOSITORIES}'
-        
         DRIFT_DETECTED=false
         echo "=== Terraform/Terragrunt Drift Detection Report ===" > $DRIFT_REPORT
         echo "Execution Date: $(date)" >> $DRIFT_REPORT
@@ -203,3 +200,4 @@ availableSecrets:
       env: 'SSH_KEY_SECRET'
 substitutions:
   DRIFT_REPORT: "/workspace/drift_report.txt"
+  REPOS: '${_REPOSITORIES}'
