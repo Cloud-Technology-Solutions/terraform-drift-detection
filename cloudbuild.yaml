@@ -38,10 +38,10 @@ steps:
         REPOS='${_REPOSITORIES}'
         
         DRIFT_DETECTED=false
-        DRIFT_REPORT="/workspace/drift_report.txt"
-        echo "=== Terraform/Terragrunt Drift Detection Report ===" > $DRIFT_REPORT
-        echo "Execution Date: $(date)" >> $DRIFT_REPORT
-        echo "" >> $DRIFT_REPORT
+        DRIFT_REPORT_FILE="/workspace/drift_report.txt"
+        echo "=== Terraform/Terragrunt Drift Detection Report ===" > $DRIFT_REPORT_FILE
+        echo "Execution Date: $(date)" >> $DRIFT_REPORT_FILE
+        echo "" >> $DRIFT_REPORT_FILE
         
         # Process each repository
         echo "$REPOS" | jq -c '.[]' | while read repo; do
@@ -51,9 +51,9 @@ steps:
           REPO_TYPE=$(echo $repo | jq -r '.type')
           
           echo "Processing repository: $REPO_NAME (branch: $REPO_BRANCH, type: $REPO_TYPE)"
-          echo "" >> $DRIFT_REPORT
-          echo "## Repository: $REPO_NAME ($REPO_BRANCH)" >> $DRIFT_REPORT
-          echo "---" >> $DRIFT_REPORT
+          echo "" >> $DRIFT_REPORT_FILE
+          echo "## Repository: $REPO_NAME ($REPO_BRANCH)" >> $DRIFT_REPORT_FILE
+          echo "---" >> $DRIFT_REPORT_FILE
           
           # Clone repository
           REPO_DIR="/workspace/repos/$REPO_NAME"
@@ -69,8 +69,8 @@ steps:
               
               # Initialize Terraform
               terraform init -input=false -no-color > /tmp/init.log 2>&1 || {
-                echo "  ? Init failed in $TF_DIR" >> $DRIFT_REPORT
-                cat /tmp/init.log >> $DRIFT_REPORT
+                echo "  ? Init failed in $TF_DIR" >> $DRIFT_REPORT_FILE
+                cat /tmp/init.log >> $DRIFT_REPORT_FILE
                 continue
               }
               
@@ -79,16 +79,16 @@ steps:
               PLAN_EXIT=$?
               
               if [ $PLAN_EXIT -eq 2 ]; then
-                echo "  ?? DRIFT DETECTED in $TF_DIR" >> $DRIFT_REPORT
-                echo "" >> $DRIFT_REPORT
-                grep -E "^(  [\+\-\~]|Plan:)" /tmp/plan.log >> $DRIFT_REPORT || true
-                echo "" >> $DRIFT_REPORT
+                echo "  ?? DRIFT DETECTED in $TF_DIR" >> $DRIFT_REPORT_FILE
+                echo "" >> $DRIFT_REPORT_FILE
+                grep -E "^(  [\+\-\~]|Plan:)" /tmp/plan.log >> $DRIFT_REPORT_FILE || true
+                echo "" >> $DRIFT_REPORT_FILE
                 DRIFT_DETECTED=true
               elif [ $PLAN_EXIT -eq 0 ]; then
-                echo "  ? No drift in $TF_DIR" >> $DRIFT_REPORT
+                echo "  ? No drift in $TF_DIR" >> $DRIFT_REPORT_FILE
               else
-                echo "  ? Plan failed in $TF_DIR" >> $DRIFT_REPORT
-                cat /tmp/plan.log >> $DRIFT_REPORT
+                echo "  ? Plan failed in $TF_DIR" >> $DRIFT_REPORT_FILE
+                cat /tmp/plan.log >> $DRIFT_REPORT_FILE
               fi
             done
           
@@ -102,8 +102,8 @@ steps:
               
               # Initialize Terragrunt
               terragrunt init --terragrunt-non-interactive > /tmp/init.log 2>&1 || {
-                echo "  ? Init failed in $TG_DIR" >> $DRIFT_REPORT
-                cat /tmp/init.log >> $DRIFT_REPORT
+                echo "  ? Init failed in $TG_DIR" >> $DRIFT_REPORT_FILE
+                cat /tmp/init.log >> $DRIFT_REPORT_FILE
                 continue
               }
               
@@ -112,21 +112,21 @@ steps:
               PLAN_EXIT=$?
               
               if [ $PLAN_EXIT -eq 2 ]; then
-                echo "  ?? DRIFT DETECTED in $TG_DIR" >> $DRIFT_REPORT
-                echo "" >> $DRIFT_REPORT
-                grep -E "^(  [\+\-\~]|Plan:)" /tmp/plan.log >> $DRIFT_REPORT || true
-                echo "" >> $DRIFT_REPORT
+                echo "  ?? DRIFT DETECTED in $TG_DIR" >> $DRIFT_REPORT_FILE
+                echo "" >> $DRIFT_REPORT_FILE
+                grep -E "^(  [\+\-\~]|Plan:)" /tmp/plan.log >> $DRIFT_REPORT_FILE || true
+                echo "" >> $DRIFT_REPORT_FILE
                 DRIFT_DETECTED=true
               elif [ $PLAN_EXIT -eq 0 ]; then
-                echo "  ? No drift in $TG_DIR" >> $DRIFT_REPORT
+                echo "  ? No drift in $TG_DIR" >> $DRIFT_REPORT_FILE
               else
-                echo "  ? Plan failed in $TG_DIR" >> $DRIFT_REPORT
-                cat /tmp/plan.log >> $DRIFT_REPORT
+                echo "  ? Plan failed in $TG_DIR" >> $DRIFT_REPORT_FILE
+                cat /tmp/plan.log >> $DRIFT_REPORT_FILE
               fi
             done
           fi
           
-          echo "" >> $DRIFT_REPORT
+          echo "" >> $DRIFT_REPORT_FILE
         done
         
         # Save drift detection status
@@ -136,7 +136,7 @@ steps:
           echo "NO_DRIFT" > /workspace/drift_status.txt
         fi
         
-        cat $DRIFT_REPORT
+        cat $DRIFT_REPORT_FILE
     volumes:
       - name: 'ssh'
         path: /root/.ssh
@@ -152,7 +152,7 @@ steps:
       - |
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         DRIFT_STATUS=$(cat /workspace/drift_status.txt)
-        DRIFT_REPORT_CONTENT=$(cat /workspace/drift_report.txt | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+        DRIFT_REPORT_FILE_CONTENT=$(cat /workspace/drift_report.txt | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
         
         if [ "$DRIFT_STATUS" = "DRIFT_DETECTED" ]; then
           curl -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d "{
@@ -169,7 +169,7 @@ steps:
                   }
                 }, {
                   \"textParagraph\": {
-                    \"text\": \"<pre>$DRIFT_REPORT_CONTENT</pre>\"
+                    \"text\": \"<pre>$DRIFT_REPORT_FILE_CONTENT</pre>\"
                   }
                 }, {
                   \"buttons\": [{
