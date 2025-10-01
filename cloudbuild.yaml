@@ -45,14 +45,12 @@ steps:
         
         # Initialize variables and files
         REPOS='${_REPOSITORIES}'
-        DRIFT_REPORT="/workspace/drift_report.txt"
-        DRIFT_FLAG="/workspace/drift_flag.txt"
         
         # Remove any existing flag file
-        rm -f "$DRIFT_FLAG"
+        rm -f "$_DRIFT_FLAG"
         
         # Initialize report
-        cat > "$DRIFT_REPORT" <<EOF
+        cat > "$_DRIFT_REPORT" <<EOF
         === Terraform/Terragrunt Drift Detection Report ===
         Execution Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
         Build ID: ${BUILD_ID}
@@ -69,9 +67,9 @@ steps:
           
           # Initialize Terraform
           if ! terraform init -input=false -no-color > /tmp/init.log 2>&1; then
-            echo "  ? Init failed in $tf_dir" >> "$DRIFT_REPORT"
-            sed 's/^/     /' /tmp/init.log >> "$DRIFT_REPORT"
-            echo "" >> "$DRIFT_REPORT"
+            echo "  ? Init failed in $tf_dir" >> "$_DRIFT_REPORT"
+            sed 's/^/     /' /tmp/init.log >> "$_DRIFT_REPORT"
+            echo "" >> "$_DRIFT_REPORT"
             return 1
           fi
           
@@ -81,19 +79,19 @@ steps:
           
           case $plan_exit in
             0)
-              echo "  ? No drift in $tf_dir" >> "$DRIFT_REPORT"
+              echo "  ? No drift in $tf_dir" >> "$_DRIFT_REPORT"
               ;;
             2)
-              echo "  ??  DRIFT DETECTED in $tf_dir" >> "$DRIFT_REPORT"
-              echo "" >> "$DRIFT_REPORT"
-              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$DRIFT_REPORT" || true
-              echo "" >> "$DRIFT_REPORT"
-              touch "$DRIFT_FLAG"
+              echo "  ??  DRIFT DETECTED in $tf_dir" >> "$_DRIFT_REPORT"
+              echo "" >> "$_DRIFT_REPORT"
+              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$_DRIFT_REPORT" || true
+              echo "" >> "$_DRIFT_REPORT"
+              touch "$_DRIFT_FLAG"
               ;;
             *)
-              echo "  ? Plan failed in $tf_dir (exit code: $plan_exit)" >> "$DRIFT_REPORT"
-              sed 's/^/     /' /tmp/plan.log >> "$DRIFT_REPORT"
-              echo "" >> "$DRIFT_REPORT"
+              echo "  ? Plan failed in $tf_dir (exit code: $plan_exit)" >> "$_DRIFT_REPORT"
+              sed 's/^/     /' /tmp/plan.log >> "$_DRIFT_REPORT"
+              echo "" >> "$_DRIFT_REPORT"
               ;;
           esac
         }
@@ -108,9 +106,9 @@ steps:
           
           # Initialize Terragrunt
           if ! terragrunt init --terragrunt-non-interactive > /tmp/init.log 2>&1; then
-            echo "  ? Init failed in $tg_dir" >> "$DRIFT_REPORT"
-            sed 's/^/     /' /tmp/init.log >> "$DRIFT_REPORT"
-            echo "" >> "$DRIFT_REPORT"
+            echo "  ? Init failed in $tg_dir" >> "$_DRIFT_REPORT"
+            sed 's/^/     /' /tmp/init.log >> "$_DRIFT_REPORT"
+            echo "" >> "$_DRIFT_REPORT"
             return 1
           fi
           
@@ -120,19 +118,19 @@ steps:
           
           case $plan_exit in
             0)
-              echo "  ? No drift in $tg_dir" >> "$DRIFT_REPORT"
+              echo "  ? No drift in $tg_dir" >> "$_DRIFT_REPORT"
               ;;
             2)
-              echo "  ??  DRIFT DETECTED in $tg_dir" >> "$DRIFT_REPORT"
-              echo "" >> "$DRIFT_REPORT"
-              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$DRIFT_REPORT" || true
-              echo "" >> "$DRIFT_REPORT"
-              touch "$DRIFT_FLAG"
+              echo "  ??  DRIFT DETECTED in $tg_dir" >> "$_DRIFT_REPORT"
+              echo "" >> "$_DRIFT_REPORT"
+              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$_DRIFT_REPORT" || true
+              echo "" >> "$_DRIFT_REPORT"
+              touch "$_DRIFT_FLAG"
               ;;
             *)
-              echo "  ? Plan failed in $tg_dir (exit code: $plan_exit)" >> "$DRIFT_REPORT"
-              sed 's/^/     /' /tmp/plan.log >> "$DRIFT_REPORT"
-              echo "" >> "$DRIFT_REPORT"
+              echo "  ? Plan failed in $tg_dir (exit code: $plan_exit)" >> "$_DRIFT_REPORT"
+              sed 's/^/     /' /tmp/plan.log >> "$_DRIFT_REPORT"
+              echo "" >> "$_DRIFT_REPORT"
               ;;
           esac
         }
@@ -155,15 +153,15 @@ steps:
             echo "## Repository: $repo_name ($repo_branch)"
             echo "Type: $repo_type"
             echo "---"
-          } >> "$DRIFT_REPORT"
+          } >> "$_DRIFT_REPORT"
           
           # Clone repository
           repo_dir="/workspace/repos/$repo_name"
           
           if ! git clone --branch "$repo_branch" --depth 1 "$repo_url" "$repo_dir" 2>/tmp/clone.log; then
-            echo "  ? Failed to clone repository" >> "$DRIFT_REPORT"
-            sed 's/^/     /' /tmp/clone.log >> "$DRIFT_REPORT"
-            echo "" >> "$DRIFT_REPORT"
+            echo "  ? Failed to clone repository" >> "$_DRIFT_REPORT"
+            sed 's/^/     /' /tmp/clone.log >> "$_DRIFT_REPORT"
+            echo "" >> "$_DRIFT_REPORT"
             continue
           fi
           
@@ -183,15 +181,15 @@ steps:
             done < <(find "$repo_dir" -name "terragrunt.hcl" -type f 2>/dev/null)
             
           else
-            echo "  ??  Unknown repository type: $repo_type" >> "$DRIFT_REPORT"
+            echo "  ??  Unknown repository type: $repo_type" >> "$_DRIFT_REPORT"
           fi
           
-          echo "" >> "$DRIFT_REPORT"
+          echo "" >> "$_DRIFT_REPORT"
           
         done < <(echo "$REPOS" | jq -c '.[]')
         
         # Determine final drift status
-        if [ -f "$DRIFT_FLAG" ]; then
+        if [ -f "$_DRIFT_FLAG" ]; then
           echo "DRIFT_DETECTED" > /workspace/drift_status.txt
           echo ""
           echo "??  DRIFT DETECTED - Check the report for details"
@@ -205,7 +203,7 @@ steps:
         echo "=== Drift Detection Complete ==="
         echo ""
         echo "Full Report:"
-        cat "$DRIFT_REPORT"
+        cat "$_DRIFT_REPORT"
         
     volumes:
       - name: 'ssh'
@@ -270,7 +268,7 @@ steps:
                     },
                     {
                       \"textParagraph\": {
-                        \"text\": \"<b>Drift Report:</b><br><pre>$DRIFT_REPORT_CONTENT</pre>\"
+                        \"text\": \"<b>Drift Report:</b><br><pre>$_DRIFT_REPORT_CONTENT</pre>\"
                       }
                     },
                     {
@@ -354,7 +352,9 @@ options:
 timeout: '3600s'
 
 substitutions:
-  _TERRAGRUNT_VERSION: "v0.54.0"
+  _TERRAGRUNT_VERSION: "v0.88.1"
+  _DRIFT_REPORT: "/workspace/drift_report.txt"
+  _DRIFT_FLAG: "/workspace/drift_flag.txt"
 
 availableSecrets:
   secretManager:
