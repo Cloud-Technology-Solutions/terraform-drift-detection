@@ -35,6 +35,7 @@ steps:
         done
     env:
       - '_SSH_KEY_SECRET=${_SSH_KEY_SECRET}'
+      - 'GIT_SSH_COMMAND="ssh -i ~/.ssh/id_rsa"'
 
   # Terraform drift detection
   - name: 'alpine:latest'
