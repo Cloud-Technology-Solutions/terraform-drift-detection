@@ -26,15 +26,12 @@ steps:
       - '-c'
       - |
         set -e
-        
-        # Install required tools
+
         apk add --no-cache git jq curl bash openssh-client
-        
-        # Install Terragrunt
+
         wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v0.88.1/terragrunt_linux_amd64 -O /usr/local/bin/terragrunt
         chmod +x /usr/local/bin/terragrunt
-        
-        # Parse repositories from substitution
+
         _REPOS='${_REPOSITORIES}'
         
         _DRIFT_DETECTED=false
@@ -42,8 +39,7 @@ steps:
         echo "=== Terraform/Terragrunt Drift Detection Report ===" > $_DRIFT_REPORT
         echo "Execution Date: $(date)" >> $_DRIFT_REPORT
         echo "" >> $_DRIFT_REPORT
-        
-        # Process each repository
+
         echo "$_REPOS" | jq -c '.[]' | while read repo; do
           _REPO_NAME=$(echo $repo | jq -r '.name')
           _REPO_URL=$(echo $repo | jq -r '.url')
@@ -54,27 +50,21 @@ steps:
           echo "" >> $_DRIFT_REPORT
           echo "## Repository: $_REPO_NAME ($_REPO_BRANCH)" >> $_DRIFT_REPORT
           echo "---" >> $_DRIFT_REPORT
-          
-          # Clone repository
+
           _REPO_DIR="/workspace/repos/$_REPO_NAME"
           git clone --branch $_REPO_BRANCH --depth 1 $_REPO_URL $_REPO_DIR
           
           if [ "$_REPO_TYPE" = "terraform" ]; then
-            # Find all directories with main.tf
             find $_REPO_DIR -name "main.tf" -type f | while read tf_file; do
               _TF_DIR=$(dirname $tf_file)
               echo "Checking Terraform in: $_TF_DIR"
-              
               cd $_TF_DIR
-              
-              # Initialize Terraform
               terraform init -input=false -no-color > /tmp/init.log 2>&1 || {
                 echo "  ? Init failed in $_TF_DIR" >> $_DRIFT_REPORT
                 cat /tmp/init.log >> $_DRIFT_REPORT
                 continue
               }
-              
-              # Run Terraform plan
+
               terraform plan -detailed-exitcode -no-color -input=false > /tmp/plan.log 2>&1
               _PLAN_EXIT=$?
               
@@ -93,21 +83,16 @@ steps:
             done
           
           elif [ "$_REPO_TYPE" = "terragrunt" ]; then
-            # Find all directories with terragrunt.hcl
             find $_REPO_DIR -name "terragrunt.hcl" -type f | while read tg_file; do
               _TG_DIR=$(dirname $tg_file)
               echo "Checking Terragrunt in: $_TG_DIR"
-              
               cd $_TG_DIR
-              
-              # Initialize Terragrunt
               terragrunt init --terragrunt-non-interactive > /tmp/init.log 2>&1 || {
                 echo "  ? Init failed in $_TG_DIR" >> $_DRIFT_REPORT
                 cat /tmp/init.log >> $_DRIFT_REPORT
                 continue
               }
-              
-              # Run Terragrunt plan
+
               terragrunt plan -detailed-exitcode --terragrunt-non-interactive > /tmp/plan.log 2>&1
               _PLAN_EXIT=$?
               
@@ -128,8 +113,7 @@ steps:
           
           echo "" >> $_DRIFT_REPORT
         done
-        
-        # Save drift detection status
+
         if [ "$_DRIFT_DETECTED" = true ]; then
           echo "_DRIFT_DETECTED" > /workspace/drift_status.txt
         else
