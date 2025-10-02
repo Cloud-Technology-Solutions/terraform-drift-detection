@@ -9,7 +9,7 @@ steps:
         set -e
         
         # Install jq
-        apt-get update && apt-get install -y jq
+        apt-get update && apt-get install -y jq openssh-client
         
         # Setup SSH
         mkdir -p ~/.ssh
