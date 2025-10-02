@@ -18,17 +18,11 @@ steps:
         # Access SSH key using gcloud
         gcloud secrets versions access latest --secret=${_SSH_KEY_SECRET} > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-
-        # debugging
-        cat ~/.ssh/id_rsa
         
-        # Configure SSH
-        cat > ~/.ssh/config << EOF
-        Host *
-          StrictHostKeyChecking no
-          UserKnownHostsFile /dev/null
-          LogLevel ERROR
-        EOF
+        # Add known hosts for major git providers
+        ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+        ssh-keyscan -H gitlab.com >> ~/.ssh/known_hosts 2>/dev/null
+        ssh-keyscan -H bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null
         
         # Clone all repositories
         echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
