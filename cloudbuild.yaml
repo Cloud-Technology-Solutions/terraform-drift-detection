@@ -18,6 +18,9 @@ steps:
         # Access SSH key using gcloud
         gcloud secrets versions access latest --secret=${_SSH_KEY_SECRET} > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
+
+        # debugging
+        cat ~/.ssh/id_rsa
         
         # Configure SSH
         cat > ~/.ssh/config << EOF
