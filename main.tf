@@ -135,7 +135,7 @@ resource "google_cloudbuild_trigger" "drift_detection" {
 
   source_to_build {
     uri       = "https://github.com/Cloud-Technology-Solutions/terraform-drift-detection"
-    ref       = "refs/heads/master"
+    ref       = "refs/heads/fb/developing-poc"
     repo_type = "GITHUB"
   }
 

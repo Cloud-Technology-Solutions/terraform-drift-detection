@@ -60,9 +60,6 @@ steps:
           https://github.com/gruntwork-io/terragrunt/releases/download/v${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
         chmod +x /usr/local/bin/terragrunt
         
-        # Install gcloud CLI for potential use
-        pip3 install -q gcloud
-        
         # Initialize variables
         _DRIFT_DETECTED=false
         _DRIFT_REPORT="/workspace/drift_report.txt"
