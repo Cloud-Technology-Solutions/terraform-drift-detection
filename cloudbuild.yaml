@@ -46,10 +46,12 @@ steps:
       - '-c'
       - |
         set -e
+
+        # Install dependencies
+        apk add --no-cache unzip wget
         
         # Install Terraform
         wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
-        mkdir -p /usr/local/bin /tmp
         unzip /tmp/terraform.zip -d /usr/local/bin/
         chmod +x /usr/local/bin/terraform
         
