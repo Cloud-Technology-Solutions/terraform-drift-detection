@@ -49,8 +49,8 @@ steps:
         apk add --no-cache git jq curl bash openssh-client ca-certificates
         
         # Install Terragrunt
-        TERRAGRUNT_VERSION="0.88.1"
-        wget -q "https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64" \
+        _TERRAGRUNT_VERSION="0.88.1"
+        wget -q "https://github.com/gruntwork-io/terragrunt/releases/download/v${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64" \
           -O /usr/local/bin/terragrunt
         chmod +x /usr/local/bin/terragrunt
         
