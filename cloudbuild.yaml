@@ -48,7 +48,7 @@ steps:
         set -e
         
         # Install dependencies
-        apk add --no-cache git jq curl bash openssh-client python3 py3-pip
+        apk add --no-cache unzip wget
         
         # Install Terraform
         wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
