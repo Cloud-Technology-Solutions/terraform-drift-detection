@@ -128,11 +128,11 @@ steps:
         cat "$_DRIFT_REPORT"
         
         # Send notification
-        WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
-        REPORT_ESCAPED=$(cat "$_DRIFT_REPORT" | jq -Rs .)
+        _WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
+        _REPORT_ESCAPED=$(cat "$_DRIFT_REPORT" | jq -Rs .)
         
         if [ "$_DRIFT_DETECTED" = true ]; then
-          curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @- << EOF
+          curl -sS -X POST -H 'Content-Type: application/json' "$_WEBHOOK_URL" -d @- << EOF
         {
           "text": "?? *Terraform Drift Detected*",
           "cards": [{
@@ -149,7 +149,7 @@ steps:
                 },
                 {
                   "textParagraph": {
-                    "text": "<pre>$REPORT_ESCAPED</pre>"
+                    "text": "<pre>$_REPORT_ESCAPED</pre>"
                   }
                 },
                 {
@@ -170,7 +170,7 @@ steps:
         }
         EOF
         else
-          curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d '{
+          curl -sS -X POST -H 'Content-Type: application/json' "$_WEBHOOK_URL" -d '{
             "text": "? *No Drift Detected* - All repositories are in sync with infrastructure."
           }'
         fi
