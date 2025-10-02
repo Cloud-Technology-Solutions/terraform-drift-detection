@@ -21,18 +21,17 @@ steps:
   # Process repositories and detect drift
   - name: 'hashicorp/terraform:latest'
     id: 'drift-detection'
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
-        #!/bin/bash
         set -e
         
         # Install required tools
         apk add --no-cache git jq curl bash openssh-client
         
         # Install Terragrunt
-        wget -q https://github.com/gruntwork-io/terragrunt/releases/download/latest/terragrunt_linux_amd64 -O /usr/local/bin/terragrunt
+        wget -q https://github.com/gruntwork-io/terragrunt/releases/download/v0.88.1/terragrunt_linux_amd64 -O /usr/local/bin/terragrunt
         chmod +x /usr/local/bin/terragrunt
         
         # Parse repositories from substitution
@@ -195,7 +194,7 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: 'N1_HIGHCPU_8'
+  machineType: 'E2_MEDIUM'
 
 timeout: '3600s'
 
