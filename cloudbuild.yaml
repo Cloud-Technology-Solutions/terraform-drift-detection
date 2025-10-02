@@ -9,7 +9,7 @@ steps:
         set -e
         
         # Install jq
-        apt-get update && apt-get install -y jq openssh-client
+        apt-get update && apt-get install -y jq
         
         # Setup SSH
         mkdir -p ~/.ssh
@@ -23,6 +23,8 @@ steps:
         ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
         ssh-keyscan -H gitlab.com >> ~/.ssh/known_hosts 2>/dev/null
         ssh-keyscan -H bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null
+
+        export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no"
         
         # Clone all repositories
         echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
@@ -35,7 +37,6 @@ steps:
         done
     env:
       - '_SSH_KEY_SECRET=${_SSH_KEY_SECRET}'
-      - 'GIT_SSH_COMMAND="ssh -i ~/.ssh/id_rsa"'
 
   # Terraform drift detection
   - name: 'alpine:latest'
