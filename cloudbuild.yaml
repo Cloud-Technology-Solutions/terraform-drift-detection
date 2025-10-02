@@ -23,11 +23,11 @@ steps:
         export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no"
         
         # Initialize variables
-        DRIFT_DETECTED=false
-        DRIFT_REPORT="/workspace/drift_report.txt"
+        _DRIFT_DETECTED=false
+        _DRIFT_REPORT="/workspace/drift_report.txt"
         
         # Create report header
-        cat > "$DRIFT_REPORT" << EOF
+        cat > "$_DRIFT_REPORT" << EOF
         === Terraform/Terragrunt Drift Detection Report ===
         Execution Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
         
@@ -42,7 +42,7 @@ steps:
           echo "Checking: $rel_path"
           
           if ! terraform init -input=false -no-color > /tmp/init.log 2>&1; then
-            echo "  ? Init failed in $rel_path" >> "$DRIFT_REPORT"
+            echo "  ? Init failed in $rel_path" >> "$_DRIFT_REPORT"
             return 1
           fi
           
@@ -51,17 +51,17 @@ steps:
           
           case $exit_code in
             0)
-              echo "  ? No drift in $rel_path" >> "$DRIFT_REPORT"
+              echo "  ? No drift in $rel_path" >> "$_DRIFT_REPORT"
               ;;
             2)
-              echo "  ?? DRIFT DETECTED in $rel_path" >> "$DRIFT_REPORT"
-              echo "" >> "$DRIFT_REPORT"
-              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$DRIFT_REPORT" || true
-              echo "" >> "$DRIFT_REPORT"
-              DRIFT_DETECTED=true
+              echo "  ?? DRIFT DETECTED in $rel_path" >> "$_DRIFT_REPORT"
+              echo "" >> "$_DRIFT_REPORT"
+              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$_DRIFT_REPORT" || true
+              echo "" >> "$_DRIFT_REPORT"
+              _DRIFT_DETECTED=true
               ;;
             *)
-              echo "  ? Plan failed in $rel_path" >> "$DRIFT_REPORT"
+              echo "  ? Plan failed in $rel_path" >> "$_DRIFT_REPORT"
               ;;
           esac
         }
@@ -75,7 +75,7 @@ steps:
           echo "Checking: $rel_path"
           
           if ! terragrunt init --terragrunt-non-interactive > /tmp/init.log 2>&1; then
-            echo "  ? Init failed in $rel_path" >> "$DRIFT_REPORT"
+            echo "  ? Init failed in $rel_path" >> "$_DRIFT_REPORT"
             return 1
           fi
           
@@ -84,17 +84,17 @@ steps:
           
           case $exit_code in
             0)
-              echo "  ? No drift in $rel_path" >> "$DRIFT_REPORT"
+              echo "  ? No drift in $rel_path" >> "$_DRIFT_REPORT"
               ;;
             2)
-              echo "  ?? DRIFT DETECTED in $rel_path" >> "$DRIFT_REPORT"
-              echo "" >> "$DRIFT_REPORT"
-              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$DRIFT_REPORT" || true
-              echo "" >> "$DRIFT_REPORT"
-              DRIFT_DETECTED=true
+              echo "  ?? DRIFT DETECTED in $rel_path" >> "$_DRIFT_REPORT"
+              echo "" >> "$_DRIFT_REPORT"
+              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$_DRIFT_REPORT" || true
+              echo "" >> "$_DRIFT_REPORT"
+              _DRIFT_DETECTED=true
               ;;
             *)
-              echo "  ? Plan failed in $rel_path" >> "$DRIFT_REPORT"
+              echo "  ? Plan failed in $rel_path" >> "$_DRIFT_REPORT"
               ;;
           esac
         }
@@ -106,9 +106,9 @@ steps:
           branch=$(echo "$repo" | jq -r '.branch')
           type=$(echo "$repo" | jq -r '.type')
           
-          echo "" >> "$DRIFT_REPORT"
-          echo "## Repository: $name (branch: $branch)" >> "$DRIFT_REPORT"
-          echo "---" >> "$DRIFT_REPORT"
+          echo "" >> "$_DRIFT_REPORT"
+          echo "## Repository: $name (branch: $branch)" >> "$_DRIFT_REPORT"
+          echo "---" >> "$_DRIFT_REPORT"
           
           repo_dir="/workspace/repos/$name"
           git clone --branch "$branch" --depth 1 "$url" "$repo_dir"
@@ -125,13 +125,13 @@ steps:
         done
         
         # Display report
-        cat "$DRIFT_REPORT"
+        cat "$_DRIFT_REPORT"
         
         # Send notification
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
-        REPORT_ESCAPED=$(cat "$DRIFT_REPORT" | jq -Rs .)
+        REPORT_ESCAPED=$(cat "$_DRIFT_REPORT" | jq -Rs .)
         
-        if [ "$DRIFT_DETECTED" = true ]; then
+        if [ "$_DRIFT_DETECTED" = true ]; then
           curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @- << EOF
         {
           "text": "?? *Terraform Drift Detected*",
