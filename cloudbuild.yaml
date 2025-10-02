@@ -2,11 +2,14 @@ steps:
   # Clone repositories first
   - name: 'gcr.io/cloud-builders/git'
     id: 'clone-repositories'
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
         set -e
+        
+        # Install jq
+        apt-get update && apt-get install -y jq
         
         # Setup SSH
         mkdir -p ~/.ssh
@@ -37,21 +40,29 @@ steps:
       - '_SSH_KEY_SECRET=${_SSH_KEY_SECRET}'
 
   # Terraform drift detection
-  - name: 'hashicorp/terraform:latest'
+  - name: 'alpine:latest'
     id: 'drift-detection'
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
         set -e
         
         # Install dependencies
-        apk add --no-cache git jq curl bash openssh-client
+        apk add --no-cache git jq curl bash openssh-client python3 py3-pip
+        
+        # Install Terraform
+        wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
+        unzip /tmp/terraform.zip -d /usr/local/bin/
+        chmod +x /usr/local/bin/terraform
         
         # Install Terragrunt
         wget -qO /usr/local/bin/terragrunt \
-          https://github.com/gruntwork-io/terragrunt/releases/download/v0.88.1/terragrunt_linux_amd64
+          https://github.com/gruntwork-io/terragrunt/releases/download/v${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
         chmod +x /usr/local/bin/terragrunt
+        
+        # Install gcloud CLI for potential use
+        pip3 install -q gcloud
         
         # Initialize variables
         _DRIFT_DETECTED=false
@@ -159,6 +170,8 @@ steps:
         echo "$_DRIFT_DETECTED" > /workspace/drift_detected.txt
     env:
       - '_REPOSITORIES=${_REPOSITORIES}'
+      - '_TERRAFORM_VERSION=${_TERRAFORM_VERSION}'
+      - '_TERRAGRUNT_VERSION=${_TERRAGRUNT_VERSION}'
 
   # Send notifications
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -229,6 +242,8 @@ steps:
 substitutions:
   _SSH_KEY_SECRET: 'terraform-drift-ssh-key'
   _CHAT_WEBHOOK_SECRET: 'terraform-drift-chat-webhook'
+  _TERRAFORM_VERSION: '1.5.7'
+  _TERRAGRUNT_VERSION: '0.88.1'
   _REPOSITORIES: '[]'  # JSON array of repo objects
 
 options:
