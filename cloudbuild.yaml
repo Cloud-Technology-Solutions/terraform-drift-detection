@@ -294,7 +294,7 @@ steps:
                   {
                     "keyValue": {
                       "topLabel": "Repository",
-                      "content": "$REPO",
+                      "content": "$$REPO",
                       "icon": "BOOKMARK"
                     }
                   },
