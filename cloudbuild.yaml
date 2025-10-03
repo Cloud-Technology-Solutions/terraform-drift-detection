@@ -282,7 +282,7 @@ steps:
             CHANGES=$(echo "$drift" | jq -r '.changes' | head -n 50)
             
             # Add comma separator if not first item
-            if [ "$FIRST" = "false" ]; then
+            if [ "$$FIRST" = "false" ]; then
               echo "," >> /tmp/sections.json
             fi
             FIRST=false
