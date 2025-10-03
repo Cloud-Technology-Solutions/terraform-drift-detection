@@ -36,7 +36,7 @@ steps:
           git clone --branch "$branch" --depth 1 "$url" "/workspace/repos/$name"
         done
 
-# Terraform drift detection
+  # Terraform drift detection
   - name: 'alpine:latest'
     id: 'drift-detection'
     entrypoint: 'sh'
@@ -47,7 +47,7 @@ steps:
 
         # Install dependencies
         apk add --no-cache unzip wget jq bash
-        
+
         # Install Terraform
         wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
         unzip /tmp/terraform.zip -d /usr/local/bin/
@@ -56,13 +56,176 @@ steps:
         wget -qO /usr/local/bin/terragrunt \
           https://github.com/gruntwork-io/terragrunt/releases/download/v${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
         chmod +x /usr/local/bin/terragrunt
- 
-        ls -al /usr/local/bin
-        echo ${_REPOSITORIES}
-        touch /workspace/drift_detected.txt
-    env:
-      - '_TERRAFORM_VERSION=${_TERRAFORM_VERSION}'
-      - '_TERRAGRUNT_VERSION=${_TERRAGRUNT_VERSION}'
+
+        # Initialize tracking files
+        echo "false" > /workspace/drift_detected.txt
+        echo "" > /workspace/drift_report.json
+        echo "[]" > /workspace/drift_summary.json
+
+        # Function to find all directories with main.tf
+        find_terraform_dirs() {
+          local base_dir="$1"
+          find "$base_dir" -type f -name "main.tf" -exec dirname {} \; | sort -u
+        }
+
+        # Function to find all directories with terragrunt.hcl
+        find_terragrunt_dirs() {
+          local base_dir="$1"
+          find "$base_dir" -type f -name "terragrunt.hcl" -exec dirname {} \; | sort -u
+        }
+
+        # Function to run terraform plan and capture drift
+        run_terraform_plan() {
+          local dir="$1"
+          local repo_name="$2"
+          local relative_path="${dir#/workspace/repos/$repo_name/}"
+          
+          echo "Running Terraform plan in: $dir"
+          cd "$dir"
+          
+          # Initialize Terraform
+          if ! terraform init -input=false > /tmp/tf_init.log 2>&1; then
+            echo "  ??  Failed to initialize Terraform"
+            cat /tmp/tf_init.log
+            return 1
+          fi
+          
+          # Run plan and capture output
+          if terraform plan -detailed-exitcode -no-color -out=/tmp/tfplan > /tmp/tf_plan.log 2>&1; then
+            echo "  ? No drift detected"
+            return 0
+          else
+            exit_code=$?
+            if [ $exit_code -eq 2 ]; then
+              echo "  ??  DRIFT DETECTED!"
+              echo "true" > /workspace/drift_detected.txt
+              
+              # Extract plan changes
+              terraform show -no-color /tmp/tfplan > /tmp/tf_show.log 2>&1
+              
+              # Create drift entry
+              jq -n \
+                --arg repo "$repo_name" \
+                --arg path "$relative_path" \
+                --arg type "terraform" \
+                --arg plan "$(cat /tmp/tf_show.log)" \
+                '{repository: $repo, path: $path, type: $type, changes: $plan}' \
+                >> /workspace/drift_summary.json
+              
+              return 2
+            else
+              echo "  ??  Plan failed with exit code: $exit_code"
+              cat /tmp/tf_plan.log
+              return 1
+            fi
+          fi
+        }
+
+        # Function to run terragrunt plan and capture drift
+        run_terragrunt_plan() {
+          local dir="$1"
+          local repo_name="$2"
+          local relative_path="${dir#/workspace/repos/$repo_name/}"
+          
+          echo "Running Terragrunt plan in: $dir"
+          cd "$dir"
+          
+          # Run terragrunt plan
+          if terragrunt plan -detailed-exitcode -no-color -out=/tmp/tgplan > /tmp/tg_plan.log 2>&1; then
+            echo "  ? No drift detected"
+            return 0
+          else
+            exit_code=$?
+            if [ $exit_code -eq 2 ]; then
+              echo "  ??  DRIFT DETECTED!"
+              echo "true" > /workspace/drift_detected.txt
+              
+              # Extract plan changes
+              cd "$dir"
+              terragrunt show -no-color /tmp/tgplan > /tmp/tg_show.log 2>&1
+              
+              # Create drift entry
+              jq -n \
+                --arg repo "$repo_name" \
+                --arg path "$relative_path" \
+                --arg type "terragrunt" \
+                --arg plan "$(cat /tmp/tg_show.log)" \
+                '{repository: $repo, path: $path, type: $type, changes: $plan}' \
+                >> /workspace/drift_summary.json
+              
+              return 2
+            else
+              echo "  ??  Plan failed with exit code: $exit_code"
+              cat /tmp/tg_plan.log
+              return 1
+            fi
+          fi
+        }
+
+        # Process each repository
+        echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
+          repo_name=$(echo "$repo" | jq -r '.name')
+          repo_type=$(echo "$repo" | jq -r '.type')
+          repo_path="/workspace/repos/$repo_name"
+          
+          echo ""
+          echo "================================================"
+          echo "Processing repository: $repo_name (type: $repo_type)"
+          echo "================================================"
+          
+          if [ ! -d "$repo_path" ]; then
+            echo "??  Repository path not found: $repo_path"
+            continue
+          fi
+          
+          if [ "$repo_type" = "terraform" ]; then
+            # Find all directories with main.tf
+            tf_dirs=$(find_terraform_dirs "$repo_path")
+            
+            if [ -z "$tf_dirs" ]; then
+              echo "No main.tf files found in $repo_name"
+              continue
+            fi
+            
+            echo "$tf_dirs" | while IFS= read -r tf_dir; do
+              run_terraform_plan "$tf_dir" "$repo_name" || true
+            done
+            
+          elif [ "$repo_type" = "terragrunt" ]; then
+            # Find all directories with terragrunt.hcl
+            tg_dirs=$(find_terragrunt_dirs "$repo_path")
+            
+            if [ -z "$tg_dirs" ]; then
+              echo "No terragrunt.hcl files found in $repo_name"
+              continue
+            fi
+            
+            echo "$tg_dirs" | while IFS= read -r tg_dir; do
+              run_terragrunt_plan "$tg_dir" "$repo_name" || true
+            done
+          else
+            echo "??  Unknown repository type: $repo_type"
+          fi
+        done
+
+        # Consolidate drift summary
+        if [ -s /workspace/drift_summary.json ]; then
+          jq -s '.' /workspace/drift_summary.json > /workspace/drift_report.json
+        else
+          echo "[]" > /workspace/drift_report.json
+        fi
+
+        echo ""
+        echo "================================================"
+        echo "Drift Detection Summary"
+        echo "================================================"
+        drift_detected=$(cat /workspace/drift_detected.txt)
+        if [ "$drift_detected" = "true" ]; then
+          echo "??  DRIFT DETECTED in one or more repositories"
+          jq -r '.[] | "  - \(.repository)/\(.path) (\(.type))"' /workspace/drift_report.json
+        else
+          echo "? No drift detected across all repositories"
+        fi
 
   # Send notifications
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -77,36 +240,149 @@ steps:
         apt-get update && apt-get install -y jq
         
         # Read variables
-        _DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
-        _DRIFT_REPORT="/workspace/drift_report.txt"
-        _WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
-        _REPORT_CONTENT=$(cat "$$_DRIFT_REPORT" | jq -Rs .)
+        DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
+        WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         
-        if [ "$$_DRIFT_DETECTED" = "true" ]; then
-          curl -sS -X POST -H 'Content-Type: application/json' "$$_WEBHOOK_URL" -d @- << EOF
+        if [ "$DRIFT_DETECTED" = "true" ]; then
+          # Read drift report
+          DRIFT_COUNT=$(jq 'length' /workspace/drift_report.json)
+          
+          # Build notification payload
+          NOTIFICATION=$(cat <<EOF
         {
           "text": "?? *Terraform Drift Detected*",
           "cards": [{
             "header": {
-              "title": "Drift Detection Report",
-              "subtitle": "Issues found in infrastructure"
+              "title": "?? Drift Detection Report",
+              "subtitle": "Found $DRIFT_COUNT location(s) with configuration drift",
+              "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/warning_amber_24dp.png"
+            },
+            "sections": [
+        EOF
+          )
+          
+          # Add summary section
+          NOTIFICATION="$NOTIFICATION"$(cat <<'EOF'
+              {
+                "widgets": [{
+                  "textParagraph": {
+                    "text": "<font color=\"#FF0000\"><b>?? Configuration drift detected!</b></font><br>Your infrastructure state differs from the code in the following locations:"
+                  }
+                }]
+              },
+        EOF
+          )
+          
+          # Add each drift location as a section
+          FIRST=true
+          jq -c '.[]' /workspace/drift_report.json | while IFS= read -r drift; do
+            REPO=$(echo "$drift" | jq -r '.repository')
+            PATH=$(echo "$drift" | jq -r '.path')
+            TYPE=$(echo "$drift" | jq -r '.type')
+            CHANGES=$(echo "$drift" | jq -r '.changes' | head -n 50)
+            
+            # Add comma separator if not first item
+            if [ "$FIRST" = "false" ]; then
+              echo "," >> /tmp/sections.json
+            fi
+            FIRST=false
+            
+            # Create section for this drift
+            cat <<EOF >> /tmp/sections.json
+              {
+                "widgets": [
+                  {
+                    "keyValue": {
+                      "topLabel": "Repository",
+                      "content": "$REPO",
+                      "icon": "BOOKMARK"
+                    }
+                  },
+                  {
+                    "keyValue": {
+                      "topLabel": "Path",
+                      "content": "$PATH",
+                      "icon": "MAP_PIN"
+                    }
+                  },
+                  {
+                    "keyValue": {
+                      "topLabel": "Type",
+                      "content": "$TYPE",
+                      "contentMultiline": false
+                    }
+                  },
+                  {
+                    "textParagraph": {
+                      "text": "<font color=\"#666666\"><pre>$(echo "$CHANGES" | sed 's/"/\\"/g' | tr '\n' ' ' | head -c 1000)...</pre></font>"
+                    }
+                  }
+                ]
+              }
+        EOF
+          done
+          
+          # Close sections array and add action buttons
+          NOTIFICATION="$NOTIFICATION"$(cat /tmp/sections.json 2>/dev/null || echo "")
+          NOTIFICATION="$NOTIFICATION"$(cat <<EOF
+              ,
+              {
+                "widgets": [{
+                  "buttons": [
+                    {
+                      "textButton": {
+                        "text": "?? View Build Logs",
+                        "onClick": {
+                          "openLink": {
+                            "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=${PROJECT_ID}"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "textButton": {
+                        "text": "?? View All Builds",
+                        "onClick": {
+                          "openLink": {
+                            "url": "https://console.cloud.google.com/cloud-build/builds?project=${PROJECT_ID}"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }]
+              }
+            ]
+          }]
+        }
+        EOF
+          )
+          
+          # Send notification
+          echo "$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+          
+        else
+          # No drift detected - send success message
+          curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @- <<EOF
+        {
+          "text": "? *No Drift Detected*",
+          "cards": [{
+            "header": {
+              "title": "? Infrastructure In Sync",
+              "subtitle": "All repositories match their infrastructure state",
+              "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/check_circle_24dp.png"
             },
             "sections": [{
               "widgets": [
                 {
                   "textParagraph": {
-                    "text": "<font color=\"#FF0000\">Configuration drift detected in one or more repositories.</font>"
-                  }
-                },
-                {
-                  "textParagraph": {
-                    "text": $$_REPORT_CONTENT
+                    "text": "<font color=\"#34A853\"><b>? No configuration drift detected</b></font><br>All monitored repositories are in sync with their infrastructure state."
                   }
                 },
                 {
                   "buttons": [{
                     "textButton": {
-                      "text": "View Build Logs",
+                      "text": "?? View Build Logs",
                       "onClick": {
                         "openLink": {
                           "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=${PROJECT_ID}"
@@ -120,15 +396,9 @@ steps:
           }]
         }
         EOF
-        else
-          curl -sS -X POST -H 'Content-Type: application/json' "$$_WEBHOOK_URL" -d '{
-            "text": "? *No Drift Detected* - All repositories are in sync with infrastructure."
-          }'
         fi
         
         echo "Notification sent successfully"
-    env:
-      - '_CHAT_WEBHOOK_SECRET=${_CHAT_WEBHOOK_SECRET}'
 
 substitutions:
   _TERRAFORM_VERSION: '1.5.7'
