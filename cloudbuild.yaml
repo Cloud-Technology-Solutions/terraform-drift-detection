@@ -162,7 +162,7 @@ steps:
         cat "$$_DRIFT_REPORT"
         
         # Store drift detection status for next step
-        echo "$_DRIFT_DETECTED" > /workspace/drift_detected.txt
+        echo "$$_DRIFT_DETECTED" > /workspace/drift_detected.txt
     env:
       - '_REPOSITORIES=${_REPOSITORIES}'
       - '_TERRAFORM_VERSION=${_TERRAFORM_VERSION}'
@@ -186,7 +186,7 @@ steps:
         _WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         _REPORT_CONTENT=$(cat "$$_DRIFT_REPORT" | jq -Rs .)
         
-        if [ "$_DRIFT_DETECTED" = "true" ]; then
+        if [ "$$_DRIFT_DETECTED" = "true" ]; then
           curl -sS -X POST -H 'Content-Type: application/json' "$_WEBHOOK_URL" -d @- << EOF
         {
           "text": "?? *Terraform Drift Detected*",
