@@ -68,11 +68,11 @@ steps:
         DRIFT_REPORT="/workspace/drift_report.txt"
         
         # Create report header
-        cat > "$DRIFT_REPORT" << 'EOF'
+        cat > "$$DRIFT_REPORT" << 'EOF'
         === Terraform/Terragrunt Drift Detection Report ===
         EOF
-        echo "Execution Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "$DRIFT_REPORT"
-        echo "" >> "$DRIFT_REPORT"
+        echo "Execution Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "$$DRIFT_REPORT"
+        echo "" >> "$$DRIFT_REPORT"
         
         # Function to check Terraform drift
         check_terraform_drift() {
@@ -83,7 +83,7 @@ steps:
           echo "Checking: $rel_path"
           
           if ! terraform init -input=false -no-color > /tmp/init.log 2>&1; then
-            echo "  ? Init failed in $rel_path" >> "$DRIFT_REPORT"
+            echo "  ? Init failed in $rel_path" >> "$$DRIFT_REPORT"
             return 1
           fi
           
@@ -92,18 +92,18 @@ steps:
           
           case $exit_code in
             0)
-              echo "  ? No drift in $rel_path" >> "$DRIFT_REPORT"
+              echo "  ? No drift in $rel_path" >> "$$DRIFT_REPORT"
               ;;
             2)
-              echo "  ?? DRIFT DETECTED in $rel_path" >> "$DRIFT_REPORT"
-              echo "" >> "$DRIFT_REPORT"
-              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$DRIFT_REPORT" || true
-              echo "" >> "$DRIFT_REPORT"
+              echo "  ?? DRIFT DETECTED in $rel_path" >> "$$DRIFT_REPORT"
+              echo "" >> "$$DRIFT_REPORT"
+              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$$DRIFT_REPORT" || true
+              echo "" >> "$$DRIFT_REPORT"
               DRIFT_DETECTED=true
               ;;
             *)
-              echo "  ? Plan failed in $rel_path (exit code: $exit_code)" >> "$DRIFT_REPORT"
-              tail -20 /tmp/plan.log >> "$DRIFT_REPORT" 2>/dev/null || true
+              echo "  ? Plan failed in $rel_path (exit code: $exit_code)" >> "$$DRIFT_REPORT"
+              tail -20 /tmp/plan.log >> "$$DRIFT_REPORT" 2>/dev/null || true
               ;;
           esac
         }
@@ -117,7 +117,7 @@ steps:
           echo "Checking: $rel_path"
           
           if ! terragrunt init --terragrunt-non-interactive > /tmp/init.log 2>&1; then
-            echo "  ? Init failed in $rel_path" >> "$DRIFT_REPORT"
+            echo "  ? Init failed in $rel_path" >> "$$DRIFT_REPORT"
             return 1
           fi
           
@@ -126,18 +126,18 @@ steps:
           
           case $exit_code in
             0)
-              echo "  ? No drift in $rel_path" >> "$DRIFT_REPORT"
+              echo "  ? No drift in $rel_path" >> "$$DRIFT_REPORT"
               ;;
             2)
-              echo "  ?? DRIFT DETECTED in $rel_path" >> "$DRIFT_REPORT"
-              echo "" >> "$DRIFT_REPORT"
-              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$DRIFT_REPORT" || true
-              echo "" >> "$DRIFT_REPORT"
+              echo "  ?? DRIFT DETECTED in $rel_path" >> "$$DRIFT_REPORT"
+              echo "" >> "$$DRIFT_REPORT"
+              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$$DRIFT_REPORT" || true
+              echo "" >> "$$DRIFT_REPORT"
               DRIFT_DETECTED=true
               ;;
             *)
-              echo "  ? Plan failed in $rel_path (exit code: $exit_code)" >> "$DRIFT_REPORT"
-              tail -20 /tmp/plan.log >> "$DRIFT_REPORT" 2>/dev/null || true
+              echo "  ? Plan failed in $rel_path (exit code: $exit_code)" >> "$$DRIFT_REPORT"
+              tail -20 /tmp/plan.log >> "$$DRIFT_REPORT" 2>/dev/null || true
               ;;
           esac
         }
@@ -149,14 +149,14 @@ steps:
           name=$(echo "$repo" | jq -r '.name')
           type=$(echo "$repo" | jq -r '.type')
           
-          echo "" >> "$DRIFT_REPORT"
-          echo "## Repository: $name" >> "$DRIFT_REPORT"
-          echo "---" >> "$DRIFT_REPORT"
+          echo "" >> "$$DRIFT_REPORT"
+          echo "## Repository: $name" >> "$$DRIFT_REPORT"
+          echo "---" >> "$$DRIFT_REPORT"
           
           repo_dir="/workspace/repos/$name"
           
           if [ ! -d "$repo_dir" ]; then
-            echo "  ? Repository directory not found: $repo_dir" >> "$DRIFT_REPORT"
+            echo "  ? Repository directory not found: $repo_dir" >> "$$DRIFT_REPORT"
             continue
           fi
           
@@ -164,7 +164,7 @@ steps:
             # Use temp file to avoid subshell
             find "$repo_dir" -name "main.tf" -type f > /tmp/tf_files.txt
             if [ ! -s /tmp/tf_files.txt ]; then
-              echo "  ? No main.tf files found" >> "$DRIFT_REPORT"
+              echo "  ? No main.tf files found" >> "$$DRIFT_REPORT"
               continue
             fi
             while IFS= read -r tf_file; do
@@ -176,7 +176,7 @@ steps:
             # Use temp file to avoid subshell
             find "$repo_dir" -name "terragrunt.hcl" -type f > /tmp/tg_files.txt
             if [ ! -s /tmp/tg_files.txt ]; then
-              echo "  ? No terragrunt.hcl files found" >> "$DRIFT_REPORT"
+              echo "  ? No terragrunt.hcl files found" >> "$$DRIFT_REPORT"
               continue
             fi
             while IFS= read -r tg_file; do
@@ -188,7 +188,7 @@ steps:
         done < /tmp/repos.json
         
         # Display report
-        cat "$DRIFT_REPORT"
+        cat "$$DRIFT_REPORT"
         
         # Store drift detection status for next step
         echo "$DRIFT_DETECTED" > /workspace/drift_detected.txt
