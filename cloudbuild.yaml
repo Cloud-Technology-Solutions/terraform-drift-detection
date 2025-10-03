@@ -225,7 +225,7 @@ steps:
         }
         EOF
         else
-          curl -sS -X POST -H 'Content-Type: application/json' "$_WEBHOOK_URL" -d '{
+          curl -sS -X POST -H 'Content-Type: application/json' "$$_WEBHOOK_URL" -d '{
             "text": "? *No Drift Detected* - All repositories are in sync with infrastructure."
           }'
         fi
