@@ -60,7 +60,7 @@ steps:
         # Initialize tracking files
         echo "false" > /workspace/drift_detected.txt
         echo "" > /workspace/drift_report.json
-        echo "[]" > /workspace/drift_summary.json
+        echo "" > /workspace/drift_summary.json
 
         # Function to find all directories with main.tf
         find_terraform_dirs() {
@@ -104,9 +104,13 @@ steps:
               terraform show -no-color /tmp/tfplan > /tmp/tf_show.log 2>&1
               
               # Create drift entry
-              jq --argjson new "$(jq -n --arg repo "$repo_name" --arg path "$relative_path" --arg type "terraform" --arg plan "$(cat /tmp/tf_show.log)" \
-                '{repository:$repo, path:$path, type:$type, changes:$plan}')" \
-                '. += [$new]' /workspace/drift_summary.json > /workspace/tmp.json && mv /workspace/tmp.json /workspace/drift_summary.json
+              jq -n \
+                --arg repo "$repo_name" \
+                --arg path "$relative_path" \
+                --arg type "terraform" \
+                --arg plan "$(cat /tmp/tf_show.log)" \
+                '{repository: $repo, path: $path, type: $type, changes: $plan}' \
+                >> /workspace/drift_summary.json
               
               return 2
             else
