@@ -60,7 +60,7 @@ steps:
         chmod +x /usr/local/bin/terragrunt
         
         # Create report header
-        cat > "$_DRIFT_REPORT" << EOF
+        cat > "${_DRIFT_REPORT}" << EOF
         === Terraform/Terragrunt Drift Detection Report ===
         Execution Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
         
