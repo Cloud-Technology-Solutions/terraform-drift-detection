@@ -59,6 +59,7 @@ steps:
  
         ls -al /usr/local/bin
         echo ${_REPOSITORIES}
+        touch /workspace/drift_detected.txt
     env:
       - '_TERRAFORM_VERSION=${_TERRAFORM_VERSION}'
       - '_TERRAGRUNT_VERSION=${_TERRAGRUNT_VERSION}'
