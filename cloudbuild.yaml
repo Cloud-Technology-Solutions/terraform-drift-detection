@@ -230,7 +230,7 @@ steps:
   # Send notifications
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'send-notification'
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     args:
       - '-c'
       - |
@@ -238,7 +238,6 @@ steps:
         
         # Install jq for JSON processing
         apt-get update && apt-get install -y jq
-        export PATH=$$PATH:/usr/bin
         
         # Read variables
         DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
@@ -246,7 +245,7 @@ steps:
         
         if [ "$$DRIFT_DETECTED" = "true" ]; then
           # Read drift report
-          DRIFT_COUNT=$(jq 'length' /workspace/drift_report.json)
+          DRIFT_COUNT=$(/usr/bin/jq 'length' /workspace/drift_report.json)
           
           # Build notification payload
           NOTIFICATION=$(cat <<EOF
@@ -276,11 +275,11 @@ steps:
           
           # Add each drift location as a section
           FIRST=true
-          jq -c '.[]' /workspace/drift_report.json | while IFS= read -r drift; do
-            REPO=$(echo "$drift" | jq -r '.repository')
-            PATH=$(echo "$drift" | jq -r '.path')
-            TYPE=$(echo "$drift" | jq -r '.type')
-            CHANGES=$(echo "$drift" | jq -r '.changes' | head -n 50)
+          /usr/bin/jq -c '.[]' /workspace/drift_report.json | while IFS= read -r drift; do
+            REPO=$(echo "$drift" | /usr/bin/jq -r '.repository')
+            PATH=$(echo "$drift" | /usr/bin/jq -r '.path')
+            TYPE=$(echo "$drift" | /usr/bin/jq -r '.type')
+            CHANGES=$(echo "$drift" | /usr/bin/jq -r '.changes' | head -n 50)
             
             # Add comma separator if not first item
             if [ "$$FIRST" = "false" ]; then
