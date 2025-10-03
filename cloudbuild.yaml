@@ -301,20 +301,20 @@ steps:
                   {
                     "keyValue": {
                       "topLabel": "Path",
-                      "content": "$PATH",
+                      "content": "$$PATH",
                       "icon": "MAP_PIN"
                     }
                   },
                   {
                     "keyValue": {
                       "topLabel": "Type",
-                      "content": "$TYPE",
+                      "content": "$$TYPE",
                       "contentMultiline": false
                     }
                   },
                   {
                     "textParagraph": {
-                      "text": "<font color=\"#666666\"><pre>$(echo "$CHANGES" | sed 's/"/\\"/g' | tr '\n' ' ' | head -c 1000)...</pre></font>"
+                      "text": "<font color=\"#666666\"><pre>$(echo "$$CHANGES" | sed 's/"/\\"/g' | tr '\n' ' ' | head -c 1000)...</pre></font>"
                     }
                   }
                 ]
