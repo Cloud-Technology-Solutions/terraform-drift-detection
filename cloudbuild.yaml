@@ -104,13 +104,9 @@ steps:
               terraform show -no-color /tmp/tfplan > /tmp/tf_show.log 2>&1
               
               # Create drift entry
-              jq -n \
-                --arg repo "$repo_name" \
-                --arg path "$relative_path" \
-                --arg type "terraform" \
-                --arg plan "$(cat /tmp/tf_show.log)" \
-                '{repository: $repo, path: $path, type: $type, changes: $plan}' \
-                >> /workspace/drift_summary.json
+              jq --argjson new "$(jq -n --arg repo "$repo_name" --arg path "$relative_path" --arg type "terraform" --arg plan "$(cat /tmp/tf_show.log)" \
+                '{repository:$repo, path:$path, type:$type, changes:$plan}')" \
+                '. += [$new]' /workspace/drift_summary.json > /workspace/tmp.json && mv /workspace/tmp.json /workspace/drift_summary.json
               
               return 2
             else
@@ -187,7 +183,7 @@ steps:
               continue
             fi
             
-            for tf_dir in $tf_dirs; do
+            echo "$tf_dirs" | while IFS= read -r tf_dir; do
               run_terraform_plan "$tf_dir" "$repo_name" || true
             done
             
