@@ -243,7 +243,7 @@ steps:
         DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         
-        if [ "$DRIFT_DETECTED" = "true" ]; then
+        if [ "$$DRIFT_DETECTED" = "true" ]; then
           # Read drift report
           DRIFT_COUNT=$(jq 'length' /workspace/drift_report.json)
           
