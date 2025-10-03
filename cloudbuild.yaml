@@ -254,7 +254,7 @@ steps:
           "cards": [{
             "header": {
               "title": "?? Drift Detection Report",
-              "subtitle": "Found $DRIFT_COUNT location(s) with configuration drift",
+              "subtitle": "Found $$DRIFT_COUNT location(s) with configuration drift",
               "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/warning_amber_24dp.png"
             },
             "sections": [
