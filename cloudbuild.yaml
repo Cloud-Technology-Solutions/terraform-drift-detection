@@ -38,7 +38,7 @@ steps:
     env:
       - '_SSH_KEY_SECRET=${_SSH_KEY_SECRET}'
 
-  # Terraform drift detection
+# Terraform drift detection
   - name: 'alpine:latest'
     id: 'drift-detection'
     entrypoint: 'sh'
@@ -48,7 +48,7 @@ steps:
         set -e
 
         # Install dependencies
-        apk add --no-cache unzip wget jq
+        apk add --no-cache unzip wget jq bash
         
         # Install Terraform
         wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
@@ -60,109 +60,119 @@ steps:
         chmod +x /usr/local/bin/terragrunt
         
         # Initialize variables
-        _DRIFT_DETECTED=false
-        _DRIFT_REPORT="/workspace/drift_report.txt"
+        DRIFT_DETECTED=false
+        DRIFT_REPORT="/workspace/drift_report.txt"
         
         # Create report header
-        cat > "$$_DRIFT_REPORT" << EOF
+        cat > "$$DRIFT_REPORT" << 'EOF'
         === Terraform/Terragrunt Drift Detection Report ===
-        Execution Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-        
         EOF
+        echo "Execution Date: $$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "$$DRIFT_REPORT"
+        echo "" >> "$$DRIFT_REPORT"
         
         # Function to check Terraform drift
         check_terraform_drift() {
-          local dir=$1
-          local rel_path=${dir#/workspace/repos/}
+          local dir=$$1
+          local rel_path=$${dir#/workspace/repos/}
           
-          cd "$dir"
-          echo "Checking: $rel_path"
+          cd "$$dir"
+          echo "Checking: $$rel_path"
           
           if ! terraform init -input=false -no-color > /tmp/init.log 2>&1; then
-            echo "  ? Init failed in $rel_path" >> "$$_DRIFT_REPORT"
+            echo "  ? Init failed in $$rel_path" >> "$$DRIFT_REPORT"
             return 1
           fi
           
           terraform plan -detailed-exitcode -no-color -input=false > /tmp/plan.log 2>&1
-          local exit_code=$?
+          local exit_code=$$?
           
-          case $exit_code in
+          case $$exit_code in
             0)
-              echo "  ? No drift in $rel_path" >> "$$_DRIFT_REPORT"
+              echo "  ? No drift in $$rel_path" >> "$$DRIFT_REPORT"
               ;;
             2)
-              echo "  ?? DRIFT DETECTED in $rel_path" >> "$$_DRIFT_REPORT"
-              echo "" >> "$$_DRIFT_REPORT"
-              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$$_DRIFT_REPORT" || true
-              echo "" >> "$$_DRIFT_REPORT"
-              _DRIFT_DETECTED=true
+              echo "  ?? DRIFT DETECTED in $$rel_path" >> "$$DRIFT_REPORT"
+              echo "" >> "$$DRIFT_REPORT"
+              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$$DRIFT_REPORT" || true
+              echo "" >> "$$DRIFT_REPORT"
+              DRIFT_DETECTED=true
               ;;
             *)
-              echo "  ? Plan failed in $rel_path" >> "$$_DRIFT_REPORT"
+              echo "  ? Plan failed in $$rel_path" >> "$$DRIFT_REPORT"
               ;;
           esac
         }
         
         # Function to check Terragrunt drift
         check_terragrunt_drift() {
-          local dir=$1
-          local rel_path=${dir#/workspace/repos/}
+          local dir=$$1
+          local rel_path=$${dir#/workspace/repos/}
           
-          cd "$dir"
-          echo "Checking: $rel_path"
+          cd "$$dir"
+          echo "Checking: $$rel_path"
           
           if ! terragrunt init --terragrunt-non-interactive > /tmp/init.log 2>&1; then
-            echo "  ? Init failed in $rel_path" >> "$$_DRIFT_REPORT"
+            echo "  ? Init failed in $$rel_path" >> "$$DRIFT_REPORT"
             return 1
           fi
           
           terragrunt plan -detailed-exitcode --terragrunt-non-interactive > /tmp/plan.log 2>&1
-          local exit_code=$?
+          local exit_code=$$?
           
-          case $exit_code in
+          case $$exit_code in
             0)
-              echo "  ? No drift in $rel_path" >> "$$_DRIFT_REPORT"
+              echo "  ? No drift in $$rel_path" >> "$$DRIFT_REPORT"
               ;;
             2)
-              echo "  ?? DRIFT DETECTED in $rel_path" >> "$$_DRIFT_REPORT"
-              echo "" >> "$$_DRIFT_REPORT"
-              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$$_DRIFT_REPORT" || true
-              echo "" >> "$$_DRIFT_REPORT"
-              _DRIFT_DETECTED=true
+              echo "  ?? DRIFT DETECTED in $$rel_path" >> "$$DRIFT_REPORT"
+              echo "" >> "$$DRIFT_REPORT"
+              grep -E "^(  [+\-~]|Plan:)" /tmp/plan.log >> "$$DRIFT_REPORT" || true
+              echo "" >> "$$DRIFT_REPORT"
+              DRIFT_DETECTED=true
               ;;
             *)
-              echo "  ? Plan failed in $rel_path" >> "$$_DRIFT_REPORT"
+              echo "  ? Plan failed in $$rel_path" >> "$$DRIFT_REPORT"
               ;;
           esac
         }
         
-        # Process repositories
-        echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
-          name=$(echo "$repo" | jq -r '.name')
-          type=$(echo "$repo" | jq -r '.type')
+        # Process repositories - avoid subshell by using temp file
+        echo '${_REPOSITORIES}' | jq -c '.[]' > /tmp/repos.json
+        
+        while IFS= read -r repo; do
+          name=$$(echo "$$repo" | jq -r '.name')
+          type=$$(echo "$$repo" | jq -r '.type')
           
-          echo "" >> "$$_DRIFT_REPORT"
-          echo "## Repository: $name" >> "$$_DRIFT_REPORT"
-          echo "---" >> "$$_DRIFT_REPORT"
+          echo "" >> "$$DRIFT_REPORT"
+          echo "## Repository: $$name" >> "$$DRIFT_REPORT"
+          echo "---" >> "$$DRIFT_REPORT"
           
-          repo_dir="/workspace/repos/$name"
+          repo_dir="/workspace/repos/$$name"
           
-          if [ "$type" = "terraform" ]; then
-            find "$repo_dir" -name "main.tf" -type f | while read -r tf_file; do
-              check_terraform_drift "$(dirname "$tf_file")"
-            done
-          elif [ "$type" = "terragrunt" ]; then
-            find "$repo_dir" -name "terragrunt.hcl" -type f | while read -r tg_file; do
-              check_terragrunt_drift "$(dirname "$tg_file")"
-            done
+          if [ "$$type" = "terraform" ]; then
+            # Use temp file to avoid subshell
+            find "$$repo_dir" -name "main.tf" -type f > /tmp/tf_files.txt
+            while IFS= read -r tf_file; do
+              if [ -n "$$tf_file" ]; then
+                check_terraform_drift "$$(dirname "$$tf_file")"
+              fi
+            done < /tmp/tf_files.txt
+          elif [ "$$type" = "terragrunt" ]; then
+            # Use temp file to avoid subshell
+            find "$$repo_dir" -name "terragrunt.hcl" -type f > /tmp/tg_files.txt
+            while IFS= read -r tg_file; do
+              if [ -n "$$tg_file" ]; then
+                check_terragrunt_drift "$$(dirname "$$tg_file")"
+              fi
+            done < /tmp/tg_files.txt
           fi
-        done
+        done < /tmp/repos.json
         
         # Display report
-        cat "$$_DRIFT_REPORT"
+        cat "$$DRIFT_REPORT"
         
         # Store drift detection status for next step
-        echo "$$_DRIFT_DETECTED" > /workspace/drift_detected.txt
+        echo "$$DRIFT_DETECTED" > /workspace/drift_detected.txt
     env:
       - '_REPOSITORIES=${_REPOSITORIES}'
       - '_TERRAFORM_VERSION=${_TERRAFORM_VERSION}'
