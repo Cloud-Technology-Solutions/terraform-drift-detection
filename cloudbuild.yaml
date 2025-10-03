@@ -359,11 +359,11 @@ steps:
           )
           
           # Send notification
-          echo "$$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+          echo "$$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
           
         else
           # No drift detected - send success message
-          curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @- <<EOF
+          curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @- <<EOF
         {
           "text": "? *No Drift Detected*",
           "cards": [{
