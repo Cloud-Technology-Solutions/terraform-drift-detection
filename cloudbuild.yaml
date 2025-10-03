@@ -85,19 +85,19 @@ steps:
           
           # Initialize Terraform
           if ! terraform init -input=false > /tmp/tf_init.log 2>&1; then
-            echo "  ??  Failed to initialize Terraform"
+            echo "  ⚠️  Failed to initialize Terraform"
             cat /tmp/tf_init.log
             return 1
           fi
           
           # Run plan and capture output
           if terraform plan -detailed-exitcode -no-color -out=/tmp/tfplan > /tmp/tf_plan.log 2>&1; then
-            echo "  ? No drift detected"
+            echo "  ✓ No drift detected"
             return 0
           else
             exit_code=$?
             if [ $exit_code -eq 2 ]; then
-              echo "  ??  DRIFT DETECTED!"
+              echo "  ⚠️  DRIFT DETECTED!"
               echo "true" > /workspace/drift_detected.txt
               
               # Extract plan changes
@@ -114,7 +114,7 @@ steps:
               
               return 2
             else
-              echo "  ??  Plan failed with exit code: $exit_code"
+              echo "  ⚠️  Plan failed with exit code: $exit_code"
               cat /tmp/tf_plan.log
               return 1
             fi
@@ -132,12 +132,12 @@ steps:
           
           # Run terragrunt plan
           if terragrunt plan -detailed-exitcode -no-color -out=/tmp/tgplan > /tmp/tg_plan.log 2>&1; then
-            echo "  ? No drift detected"
+            echo "  ✓ No drift detected"
             return 0
           else
             exit_code=$?
             if [ $exit_code -eq 2 ]; then
-              echo "  ??  DRIFT DETECTED!"
+              echo "  ⚠️  DRIFT DETECTED!"
               echo "true" > /workspace/drift_detected.txt
               
               # Extract plan changes
@@ -155,7 +155,7 @@ steps:
               
               return 2
             else
-              echo "  ??  Plan failed with exit code: $exit_code"
+              echo "  ⚠️  Plan failed with exit code: $exit_code"
               cat /tmp/tg_plan.log
               return 1
             fi
@@ -174,7 +174,7 @@ steps:
           echo "================================================"
           
           if [ ! -d "$repo_path" ]; then
-            echo "??  Repository path not found: $repo_path"
+            echo "⚠️  Repository path not found: $repo_path"
             continue
           fi
           
@@ -204,7 +204,7 @@ steps:
               run_terragrunt_plan "$tg_dir" "$repo_name" || true
             done
           else
-            echo "??  Unknown repository type: $repo_type"
+            echo "⚠️  Unknown repository type: $repo_type"
           fi
         done
 
@@ -221,10 +221,10 @@ steps:
         echo "================================================"
         drift_detected=$(cat /workspace/drift_detected.txt)
         if [ "$drift_detected" = "true" ]; then
-          echo "??  DRIFT DETECTED in one or more repositories"
+          echo "⚠️  DRIFT DETECTED in one or more repositories"
           jq -r '.[] | "  - \(.repository)/\(.path) (\(.type))"' /workspace/drift_report.json
         else
-          echo "? No drift detected across all repositories"
+          echo "✓ No drift detected across all repositories"
         fi
 
   # Send notifications
@@ -250,10 +250,10 @@ steps:
           # Build notification payload
           NOTIFICATION=$(cat <<EOF
         {
-          "text": "?? *Terraform Drift Detected*",
+          "text": "⚠️ *Terraform Drift Detected*",
           "cards": [{
             "header": {
-              "title": "?? Drift Detection Report",
+              "title": "🔍 Drift Detection Report",
               "subtitle": "Found $$DRIFT_COUNT location(s) with configuration drift",
               "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/warning_amber_24dp.png"
             },
@@ -266,7 +266,7 @@ steps:
               {
                 "widgets": [{
                   "textParagraph": {
-                    "text": "<font color=\"#FF0000\"><b>?? Configuration drift detected!</b></font><br>Your infrastructure state differs from the code in the following locations:"
+                    "text": "<font color=\"#FF0000\"><b>⚠️ Configuration drift detected!</b></font><br>Your infrastructure state differs from the code in the following locations:"
                   }
                 }]
               },
@@ -331,7 +331,7 @@ steps:
                   "buttons": [
                     {
                       "textButton": {
-                        "text": "?? View Build Logs",
+                        "text": "📋 View Build Logs",
                         "onClick": {
                           "openLink": {
                             "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=${PROJECT_ID}"
@@ -341,7 +341,7 @@ steps:
                     },
                     {
                       "textButton": {
-                        "text": "?? View All Builds",
+                        "text": "📊 View All Builds",
                         "onClick": {
                           "openLink": {
                             "url": "https://console.cloud.google.com/cloud-build/builds?project=${PROJECT_ID}"
@@ -365,10 +365,10 @@ steps:
           # No drift detected - send success message
           curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @- <<EOF
         {
-          "text": "? *No Drift Detected*",
+          "text": "✅ *No Drift Detected*",
           "cards": [{
             "header": {
-              "title": "? Infrastructure In Sync",
+              "title": "✅ Infrastructure In Sync",
               "subtitle": "All repositories match their infrastructure state",
               "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/check_circle_24dp.png"
             },
@@ -376,13 +376,13 @@ steps:
               "widgets": [
                 {
                   "textParagraph": {
-                    "text": "<font color=\"#34A853\"><b>? No configuration drift detected</b></font><br>All monitored repositories are in sync with their infrastructure state."
+                    "text": "<font color=\"#34A853\"><b>✓ No configuration drift detected</b></font><br>All monitored repositories are in sync with their infrastructure state."
                   }
                 },
                 {
                   "buttons": [{
                     "textButton": {
-                      "text": "?? View Build Logs",
+                      "text": "📋 View Build Logs",
                       "onClick": {
                         "openLink": {
                           "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=${PROJECT_ID}"

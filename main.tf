@@ -181,3 +181,10 @@ resource "google_project_iam_member" "drift_detector_builds_editor" {
   role    = "roles/cloudbuild.builds.editor"
   member  = "serviceAccount:${google_service_account.drift_detector.email}"
 }
+
+# Grant Cloud Build service account permission to update terraform state in GCS
+resource "google_project_iam_member" "drift_detector_storage_admin" {
+  project = var.project_id
+  role    = "roles/storage.objectAdmin"
+  member  = "serviceAccount:${google_service_account.drift_detector.email}"
+}
