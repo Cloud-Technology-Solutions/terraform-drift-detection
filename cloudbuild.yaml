@@ -143,7 +143,7 @@ steps:
         }
         
         # Process repositories - avoid subshell by using temp file
-        echo "$REPOSITORIES_JSON" | jq -c '.[]' > /tmp/repos.json
+        echo "$_REPOSITORIES" | jq -c '.[]' > /tmp/repos.json
         
         while IFS= read -r repo; do
           name=$(echo "$repo" | jq -r '.name')
@@ -197,7 +197,6 @@ steps:
         chmod +x /tmp/check_drift.sh
         
         # Export repositories JSON and run the script
-        export REPOSITORIES_JSON='${_REPOSITORIES}'
         /tmp/check_drift.sh
     env:
       - '_REPOSITORIES=${_REPOSITORIES}'
