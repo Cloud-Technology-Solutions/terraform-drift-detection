@@ -238,7 +238,7 @@ steps:
         
         # Install jq for JSON processing
         apt-get update && apt-get install -y jq
-        export PATH=$PATH:/usr/bin
+        export PATH=$$PATH:/usr/bin
         
         # Read variables
         DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
