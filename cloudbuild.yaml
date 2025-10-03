@@ -104,13 +104,13 @@ steps:
               terraform show -no-color /tmp/tfplan > /tmp/tf_show.log 2>&1
               
               # Create drift entry
-              jq -n \
-                --arg repo "$repo_name" \
+              jq --arg repo "$repo_name" \
                 --arg path "$relative_path" \
                 --arg type "terraform" \
                 --arg plan "$(cat /tmp/tf_show.log)" \
-                '{repository: $repo, path: $path, type: $type, changes: $plan}' \
-                >> /workspace/drift_summary.json
+                '. += [{"repository": $repo, "path": $path, "type": $type, "changes": $plan}]' \
+                /workspace/drift_summary.json > /workspace/drift_summary_tmp.json \
+              && mv /workspace/drift_summary_tmp.json /workspace/drift_summary.json
               
               return 2
             else
