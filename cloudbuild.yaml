@@ -191,7 +191,7 @@ steps:
         cat "$$DRIFT_REPORT"
         
         # Store drift detection status for next step
-        echo "$DRIFT_DETECTED" > /workspace/drift_detected.txt
+        echo "$$DRIFT_DETECTED" > /workspace/drift_detected.txt
         SCRIPT_EOF
         
         chmod +x /tmp/check_drift.sh
