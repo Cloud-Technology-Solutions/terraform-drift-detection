@@ -262,7 +262,7 @@ steps:
           )
           
           # Add summary section
-          NOTIFICATION="$NOTIFICATION"$(cat <<'EOF'
+          NOTIFICATION="$$NOTIFICATION"$(cat <<'EOF'
               {
                 "widgets": [{
                   "textParagraph": {
@@ -323,8 +323,8 @@ steps:
           done
           
           # Close sections array and add action buttons
-          NOTIFICATION="$NOTIFICATION"$(cat /tmp/sections.json 2>/dev/null || echo "")
-          NOTIFICATION="$NOTIFICATION"$(cat <<EOF
+          NOTIFICATION="$$NOTIFICATION"$(cat /tmp/sections.json 2>/dev/null || echo "")
+          NOTIFICATION="$$NOTIFICATION"$(cat <<EOF
               ,
               {
                 "widgets": [{
@@ -359,7 +359,7 @@ steps:
           )
           
           # Send notification
-          echo "$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+          echo "$$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
           
         else
           # No drift detected - send success message
