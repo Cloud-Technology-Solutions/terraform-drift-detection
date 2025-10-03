@@ -185,6 +185,8 @@ steps:
         _DRIFT_REPORT="/workspace/drift_report.txt"
         _WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         _REPORT_CONTENT=$(cat "$$_DRIFT_REPORT" | jq -Rs .)
+
+        echo "Webhook secret: $$_WEBHOOK_URL"
         
         if [ "$$_DRIFT_DETECTED" = "true" ]; then
           curl -sS -X POST -H 'Content-Type: application/json' "$_WEBHOOK_URL" -d @- << EOF
@@ -204,7 +206,7 @@ steps:
                 },
                 {
                   "textParagraph": {
-                    "text": $_REPORT_CONTENT
+                    "text": $$_REPORT_CONTENT
                   }
                 },
                 {
