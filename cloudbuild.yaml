@@ -35,8 +35,6 @@ steps:
           echo "Cloning repository: $name (branch: $branch)"
           git clone --branch "$branch" --depth 1 "$url" "/workspace/repos/$name"
         done
-    env:
-      - '_SSH_KEY_SECRET=${_SSH_KEY_SECRET}'
 
 # Terraform drift detection
   - name: 'alpine:latest'
@@ -143,7 +141,7 @@ steps:
         }
         
         # Process repositories - avoid subshell by using temp file
-        echo "$_REPOSITORIES" | jq -c '.[]' > /tmp/repos.json
+        echo "${_REPOSITORIES}" | jq -c '.[]' > /tmp/repos.json
         
         while IFS= read -r repo; do
           name=$(echo "$repo" | jq -r '.name')
@@ -270,11 +268,8 @@ steps:
       - '_CHAT_WEBHOOK_SECRET=${_CHAT_WEBHOOK_SECRET}'
 
 substitutions:
-  _SSH_KEY_SECRET: 'terraform-drift-ssh-key'
-  _CHAT_WEBHOOK_SECRET: 'terraform-drift-chat-webhook'
   _TERRAFORM_VERSION: '1.5.7'
   _TERRAGRUNT_VERSION: '0.88.1'
-  _REPOSITORIES: '[]'  # JSON array of repo objects
 
 options:
   logging: CLOUD_LOGGING_ONLY
