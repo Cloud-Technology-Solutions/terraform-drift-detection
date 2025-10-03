@@ -49,8 +49,6 @@ steps:
 
         # Install dependencies
         apk add --no-cache unzip wget
-
-        ls -al /tmp
         
         # Install Terraform
         wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
@@ -60,10 +58,6 @@ steps:
         wget -qO /usr/local/bin/terragrunt \
           https://github.com/gruntwork-io/terragrunt/releases/download/v${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
         chmod +x /usr/local/bin/terragrunt
-        
-        # Initialize variables
-        _DRIFT_DETECTED=false
-        _DRIFT_REPORT="/workspace/drift_report.txt"
         
         # Create report header
         cat > "$_DRIFT_REPORT" << EOF
@@ -169,6 +163,8 @@ steps:
       - '_REPOSITORIES=${_REPOSITORIES}'
       - '_TERRAFORM_VERSION=${_TERRAFORM_VERSION}'
       - '_TERRAGRUNT_VERSION=${_TERRAGRUNT_VERSION}'
+      - '_DRIFT_DETECTED=false'
+      - '_DRIFT_REPORT="/workspace/drift_report.txt"'
 
   # Send notifications
   - name: 'gcr.io/cloud-builders/gcloud'
