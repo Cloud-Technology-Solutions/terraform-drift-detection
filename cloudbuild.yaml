@@ -15,8 +15,8 @@ steps:
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
         
-        # Access SSH key using gcloud
-        gcloud secrets versions access latest --secret=$${_SSH_KEY_SECRET} > ~/.ssh/id_rsa
+        # Access SSH key using gcloud - FIXED: use $ not $$ for substitution variables
+        gcloud secrets versions access latest --secret=${_SSH_KEY_SECRET} > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         
         # Add known hosts for major git providers
@@ -26,11 +26,11 @@ steps:
 
         export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no"
         
-        # Clone all repositories
-        echo '$${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
-          name=$$(echo "$$repo" | jq -r '.name')
-          url=$$(echo "$$repo" | jq -r '.url')
-          branch=$$(echo "$$repo" | jq -r '.branch')
+        # Clone all repositories - FIXED: use $ for substitution, $$ for local vars
+        echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
+          name=$(echo "$$repo" | jq -r '.name')
+          url=$(echo "$$repo" | jq -r '.url')
+          branch=$(echo "$$repo" | jq -r '.branch')
           
           echo "Cloning repository: $$name (branch: $$branch)"
           git clone --branch "$$branch" --depth 1 "$$url" "/workspace/repos/$$name"
@@ -48,13 +48,13 @@ steps:
         # Install dependencies
         apk add --no-cache unzip wget jq bash
 
-        # Install Terraform
-        wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/$${_TERRAFORM_VERSION}/terraform_$${_TERRAFORM_VERSION}_linux_amd64.zip
+        # Install Terraform - FIXED: use $ for substitution variables
+        wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
         unzip /tmp/terraform.zip -d /usr/local/bin/
         
-        # Install Terragrunt
+        # Install Terragrunt - FIXED: use $ for substitution variables
         wget -qO /usr/local/bin/terragrunt \
-          https://github.com/gruntwork-io/terragrunt/releases/download/v$${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
+          https://github.com/gruntwork-io/terragrunt/releases/download/v${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
         chmod +x /usr/local/bin/terragrunt
 
         # Initialize tracking files
@@ -170,10 +170,10 @@ steps:
         # Initialize drift entries file
         echo "" > /workspace/drift_entries.ndjson
 
-        # Process each repository
-        echo '$${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
-          repo_name=$$(echo "$$repo" | jq -r '.name')
-          repo_type=$$(echo "$$repo" | jq -r '.type')
+        # Process each repository - FIXED: use $ for substitution variables
+        echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
+          repo_name=$(echo "$$repo" | jq -r '.name')
+          repo_type=$(echo "$$repo" | jq -r '.type')
           repo_path="/workspace/repos/$$repo_name"
           
           echo ""
@@ -188,7 +188,7 @@ steps:
           
           if [ "$$repo_type" = "terraform" ]; then
             # Find all directories with main.tf
-            tf_dirs=$$(find_terraform_dirs "$$repo_path")
+            tf_dirs=$(find_terraform_dirs "$$repo_path")
             
             if [ -z "$$tf_dirs" ]; then
               echo "No main.tf files found in $$repo_name"
@@ -197,7 +197,7 @@ steps:
             
             echo "$$tf_dirs" | while IFS= read -r tf_dir; do
               # Get all workspaces for this directory
-              workspaces=$$(get_workspaces "$$tf_dir")
+              workspaces=$(get_workspaces "$$tf_dir")
               echo "$$workspaces" | while IFS= read -r workspace; do
                 run_terraform_plan "$$tf_dir" "$$repo_name" "$$workspace" || true
               done
@@ -205,7 +205,7 @@ steps:
             
           elif [ "$$repo_type" = "terragrunt" ]; then
             # Find all directories with terragrunt.hcl
-            tg_dirs=$$(find_terragrunt_dirs "$$repo_path")
+            tg_dirs=$(find_terragrunt_dirs "$$repo_path")
             
             if [ -z "$$tg_dirs" ]; then
               echo "No terragrunt.hcl files found in $$repo_name"
@@ -231,7 +231,7 @@ steps:
         echo "================================================"
         echo "Drift Detection Summary"
         echo "================================================"
-        drift_detected=$$(cat /workspace/drift_detected.txt)
+        drift_detected=$(cat /workspace/drift_detected.txt)
         if [ "$$drift_detected" = "true" ]; then
           echo "⚠️  DRIFT DETECTED in one or more repositories"
           jq -r '.[] | "  - \(.repository)/\(.path) (workspace: \(.workspace), type: \(.type))"' /workspace/drift_report.json
@@ -252,21 +252,22 @@ steps:
         apt-get update && apt-get install -y jq
         
         # Read variables
-        DRIFT_DETECTED=$$(cat /workspace/drift_detected.txt)
-        WEBHOOK_URL=$$(gcloud secrets versions access latest --secret=$${_CHAT_WEBHOOK_SECRET})
+        DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
+        # FIXED: use $ not $$ for substitution variables in gcloud command
+        WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         
         if [ "$$DRIFT_DETECTED" = "true" ]; then
           # Read drift report
-          DRIFT_REPORT=$$(cat /workspace/drift_report.json)
-          DRIFT_COUNT=$$(echo "$$DRIFT_REPORT" | jq 'length')
+          DRIFT_REPORT=$(cat /workspace/drift_report.json)
+          DRIFT_COUNT=$(echo "$$DRIFT_REPORT" | jq 'length')
           
           # Build drift locations list
           DRIFF_LOCATIONS=""
           echo "$$DRIFT_REPORT" | jq -c '.[]' | while IFS= read -r drift; do
-            REPO=$$(echo "$$drift" | jq -r '.repository')
-            PATH=$$(echo "$$drift" | jq -r '.path')
-            WORKSPACE=$$(echo "$$drift" | jq -r '.workspace')
-            TYPE=$$(echo "$$drift" | jq -r '.type')
+            REPO=$(echo "$$drift" | jq -r '.repository')
+            PATH=$(echo "$$drift" | jq -r '.path')
+            WORKSPACE=$(echo "$$drift" | jq -r '.workspace')
+            TYPE=$(echo "$$drift" | jq -r '.type')
             
             LOCATION="• $$REPO/$$PATH"
             if [ "$$WORKSPACE" != "default" ]; then
@@ -278,7 +279,7 @@ steps:
           done
           
           # Create notification payload
-          NOTIFICATION_PAYLOAD=$$(cat <<EOF
+          NOTIFICATION_PAYLOAD=$(cat <<EOF
         {
           "text": "⚠️ *Terraform Drift Detected*",
           "cards": [
