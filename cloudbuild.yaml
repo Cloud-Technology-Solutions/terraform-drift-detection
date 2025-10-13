@@ -315,7 +315,7 @@ steps:
                   },
                   {
                     "textParagraph": {
-                      "text": "<font color=\"#666666\"><pre>$(echo "$ENCODED" | head -c 1000)...</pre></font>"
+                      "text": "<font color=\"#666666\"><pre>$(echo "$$ENCODED" | head -c 1000)...</pre></font>"
                     }
                   }
                 ]
