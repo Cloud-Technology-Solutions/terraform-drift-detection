@@ -159,7 +159,7 @@ steps:
                 --arg repo "$repo_name" \
                 --arg path "$relative_path" \
                 --arg type "terragrunt" \
-                --argjson plan "$SANITIZED_PLAN" \
+                --argjson plan "$$SANITIZED_PLAN" \
                 '{repository: $repo, path: $path, type: $type, changes: $plan}' >> /workspace/drift_entries.jsonl
               
               return 2
