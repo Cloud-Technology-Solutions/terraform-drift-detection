@@ -259,15 +259,15 @@ steps:
         if [ "$$DRIFT_DETECTED" = "true" ]; then
           # Read drift report
           DRIFT_REPORT=$(cat /workspace/drift_report.json)
-          DRIFT_COUNT=$(echo "$$DRIFT_REPORT" | jq 'length')
+          DRIFT_COUNT=$(echo "$$DRIFT_REPORT" | /usr/bin/jq 'length')
           
           # Build drift locations list
           DRIFF_LOCATIONS=""
-          echo "$$DRIFT_REPORT" | jq -c '.[]' | while IFS= read -r drift; do
-            REPO=$(echo "$$drift" | jq -r '.repository')
-            PATH=$(echo "$$drift" | jq -r '.path')
-            WORKSPACE=$(echo "$$drift" | jq -r '.workspace')
-            TYPE=$(echo "$$drift" | jq -r '.type')
+          echo "$$DRIFT_REPORT" | /usr/bin/jq -c '.[]' | while IFS= read -r drift; do
+            REPO=$(echo "$$drift" | /usr/bin/jq -r '.repository')
+            PATH=$(echo "$$drift" | /usr/bin/jq -r '.path')
+            WORKSPACE=$(echo "$$drift" | /usr/bin/jq -r '.workspace')
+            TYPE=$(echo "$$drift" | /usr/bin/jq -r '.type')
             
             LOCATION="• $$REPO/$$PATH"
             if [ "$$WORKSPACE" != "default" ]; then
