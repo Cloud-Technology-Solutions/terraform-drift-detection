@@ -227,7 +227,6 @@ steps:
           echo "✓ No drift detected across all repositories"
         fi
 
-
 # Send notifications
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'send-notification'
@@ -244,14 +243,14 @@ steps:
         DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         
-        if [ "$$DRIFT_DETECTED" = "true" ]; then
+        if [ "$DRIFT_DETECTED" = "true" ]; then
           # Read drift report
           DRIFT_COUNT=$(jq 'length' /workspace/drift_report.json)
           
           # Build base notification structure
-          NOTIFICATION=$(jq -n \
+          jq -n \
             --arg title "⚠️ Terraform Drift Detected" \
-            --arg subtitle "Found $$DRIFT_COUNT location(s) with configuration drift" \
+            --arg subtitle "Found $DRIFT_COUNT location(s) with configuration drift" \
             '{
               text: $title,
               cards: [{
@@ -262,18 +261,19 @@ steps:
                 },
                 sections: []
               }]
-            }')
+            }' > /tmp/notification.json
           
           # Add summary section
-          SUMMARY_SECTION=$(jq -n '{
+          jq -n '{
             widgets: [{
               textParagraph: {
                 text: "<font color=\"#FF0000\"><b>⚠️ Configuration drift detected!</b></font><br>Your infrastructure state differs from the code in the following locations:"
               }
             }]
-          }')
+          }' > /tmp/summary_section.json
           
-          NOTIFICATION=$(echo "$$NOTIFICATION" | jq ".cards[0].sections += [$$SUMMARY_SECTION]")
+          jq '.cards[0].sections += [input]' /tmp/notification.json /tmp/summary_section.json > /tmp/notification_tmp.json
+          mv /tmp/notification_tmp.json /tmp/notification.json
           
           # Add each drift location as a section
           jq -c '.[]' /workspace/drift_report.json | while IFS= read -r drift; do
@@ -281,25 +281,24 @@ steps:
             PATH=$(echo "$drift" | jq -r '.path')
             TYPE=$(echo "$drift" | jq -r '.type')
             
-            # Sanitize changes: remove all control characters except newline/tab, then escape for JSON
+            # Sanitize changes: remove all control characters, then truncate
             CHANGES=$(echo "$drift" | jq -r '.changes' | \
-              tr -d '\000-\011\013-\037' | \
-              head -c 800 | \
-              jq -Rs . | \
-              sed 's/^"//; s/"$//')
+              tr -d '\000-\037' | \
+              tr -s ' ' | \
+              head -c 600)
             
-            # Create section for this drift using jq to handle escaping
-            DRIFT_SECTION=$(jq -n \
+            # Create section for this drift
+            jq -n \
               --arg repo "$$REPO" \
               --arg path "$$PATH" \
               --arg type "$$TYPE" \
-              --argjson changes "$$CHANGES" \
+              --arg changes "$$CHANGES" \
               '{
                 widgets: [
                   {
                     keyValue: {
                       topLabel: "Repository",
-                      content: $$repo,
+                      content: $repo,
                       icon: "BOOKMARK"
                     }
                   },
@@ -313,23 +312,24 @@ steps:
                   {
                     keyValue: {
                       topLabel: "Type",
-                      content: $$type,
+                      content: $type,
                       contentMultiline: false
                     }
                   },
                   {
                     textParagraph: {
-                      text: ("<font color=\"#666666\"><pre>" + $$changes + "...</pre></font>")
+                      text: ("<font color=\"#666666\"><pre>" + $changes + "...</pre></font>")
                     }
                   }
                 ]
-              }')
+              }' > /tmp/drift_section.json
             
-            NOTIFICATION=$(echo "$$NOTIFICATION" | jq ".cards[0].sections += [$$DRIFT_SECTION]")
+            jq '.cards[0].sections += [input]' /tmp/notification.json /tmp/drift_section.json > /tmp/notification_tmp.json
+            mv /tmp/notification_tmp.json /tmp/notification.json
           done
           
           # Add action buttons section
-          BUTTONS_SECTION=$(jq -n \
+          jq -n \
             --arg project_id "${PROJECT_ID}" \
             '{
               widgets: [{
@@ -356,12 +356,13 @@ steps:
                   }
                 ]
               }]
-            }')
+            }' > /tmp/buttons_section.json
           
-          NOTIFICATION=$(echo "$$NOTIFICATION" | jq ".cards[0].sections += [$$BUTTONS_SECTION]")
+          jq '.cards[0].sections += [input]' /tmp/notification.json /tmp/buttons_section.json > /tmp/notification_tmp.json
+          mv /tmp/notification_tmp.json /tmp/notification.json
           
           # Send notification
-          echo "$$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
+          curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @/tmp/notification.json
           
         else
           # No drift detected - send success message
@@ -397,7 +398,7 @@ steps:
                   ]
                 }]
               }]
-            }' | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
+            }' | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
         fi
         
         echo "Notification sent successfully"
