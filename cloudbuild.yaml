@@ -85,7 +85,11 @@ steps:
           local dir="$$1"
           local repo_name="$$2"
           local workspace="$$3"
-          local relative_path="$${dir#/workspace/repos/$$repo_name/}"
+          local relative_path="$${dir#/workspace/repos/$$repo_name}"
+          relative_path="$${relative_path#/}"  # Remove leading slash if present
+          if [ -z "$$relative_path" ]; then
+            relative_path="(root)"
+          fi
           
           echo "Running Terraform plan in: $$dir (workspace: $$workspace)"
           cd "$$dir"
@@ -135,7 +139,11 @@ steps:
         run_terragrunt_plan() {
           local dir="$$1"
           local repo_name="$$2"
-          local relative_path="$${dir#/workspace/repos/$$repo_name/}"
+          local relative_path="$${dir#/workspace/repos/$$repo_name}"
+          relative_path="$${relative_path#/}"  # Remove leading slash if present
+          if [ -z "$$relative_path" ]; then
+            relative_path="(root)"
+          fi
           
           echo "Running Terragrunt plan in: $$dir"
           cd "$$dir"
@@ -260,28 +268,24 @@ steps:
           DRIFT_REPORT=$(cat /workspace/drift_report.json)
           DRIFT_COUNT=$(echo "$$DRIFT_REPORT" | /usr/bin/jq 'length')
           
-          # Build drift locations list - FIXED: use temporary file instead of variable
-          TEMP_FILE=$(mktemp)
+          # Build formatted drift list
+          DRIFT_LIST=""
           echo "$$DRIFT_REPORT" | /usr/bin/jq -c '.[]' | while IFS= read -r drift; do
             REPO=$(echo "$$drift" | /usr/bin/jq -r '.repository')
             PATH=$(echo "$$drift" | /usr/bin/jq -r '.path')
             WORKSPACE=$(echo "$$drift" | /usr/bin/jq -r '.workspace')
             TYPE=$(echo "$$drift" | /usr/bin/jq -r '.type')
             
-            LOCATION="• $$REPO/$$PATH"
-            if [ "$$WORKSPACE" != "default" ]; then
-              LOCATION="$$LOCATION (workspace: $$WORKSPACE)"
+            # Format the entry
+            ENTRY="• <b>Repo:</b> $$REPO<br>  <b>Path:</b> $$PATH<br>  <b>Workspace:</b> $$WORKSPACE<br>  <b>Type:</b> $$TYPE"
+            if [ -z "$$DRIFT_LIST" ]; then
+              DRIFT_LIST="$$ENTRY"
+            else
+              DRIFT_LIST="$$DRIFT_LIST<br><br>$$ENTRY"
             fi
-            LOCATION="$$LOCATION - $$TYPE"
-            
-            echo "$$LOCATION" >> "$$TEMP_FILE"
           done
           
-          # Read the temporary file content
-          DRIFF_LOCATIONS=$(cat "$$TEMP_FILE" | tr '\n' '\n')
-          rm -f "$$TEMP_FILE"
-          
-          # Create notification payload
+          # Create notification payload with better formatting
           NOTIFICATION_PAYLOAD=$(cat <<EOF
         {
           "text": "⚠️ *Terraform Drift Detected*",
@@ -306,7 +310,7 @@ steps:
                   "widgets": [
                     {
                       "textParagraph": {
-                        "text": "$$(echo "$$DRIFF_LOCATIONS" | sed 's/"/\\"/g' | sed 's/$/\\n/g' | tr -d '\n')"
+                        "text": "$$DRIFT_LIST"
                       }
                     }
                   ]
