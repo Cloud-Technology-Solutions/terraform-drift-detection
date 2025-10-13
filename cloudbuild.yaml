@@ -36,7 +36,7 @@ steps:
           git clone --branch "$branch" --depth 1 "$url" "/workspace/repos/$name"
         done
 
-  # Terraform drift detection
+# Terraform drift detection
   - name: 'alpine:latest'
     id: 'drift-detection'
     entrypoint: 'sh'
@@ -59,8 +59,7 @@ steps:
 
         # Initialize tracking files
         echo "false" > /workspace/drift_detected.txt
-        echo "" > /workspace/drift_report.json
-        echo "" > /workspace/drift_summary.json
+        echo "[]" > /workspace/drift_report.json
 
         # Function to find all directories with main.tf
         find_terraform_dirs() {
@@ -72,6 +71,12 @@ steps:
         find_terragrunt_dirs() {
           local base_dir="$1"
           find "$base_dir" -type f -name "terragrunt.hcl" -exec dirname {} \; | sort -u
+        }
+
+        # Function to sanitize text for JSON (remove control characters)
+        sanitize_for_json() {
+          # Remove all control characters except newline and tab, then escape for JSON using jq
+          tr -d '\000-\010\013-\037\177' | jq -Rs .
         }
 
         # Function to run terraform plan and capture drift
@@ -103,14 +108,16 @@ steps:
               # Extract plan changes
               terraform show -no-color /tmp/tfplan > /tmp/tf_show.log 2>&1
               
-              # Create drift entry
+              # Sanitize the plan output and create drift entry
+              SANITIZED_PLAN=$(cat /tmp/tf_show.log | head -c 5000 | sanitize_for_json)
+              
+              # Create drift entry with properly escaped JSON
               jq -n \
                 --arg repo "$repo_name" \
                 --arg path "$relative_path" \
                 --arg type "terraform" \
-                --arg plan "$(cat /tmp/tf_show.log)" \
-                '{repository: $repo, path: $path, type: $type, changes: $plan}' \
-                >> /workspace/drift_summary.json
+                --argjson plan "$$SANITIZED_PLAN" \
+                '{repository: $repo, path: $path, type: $type, changes: $plan}' >> /workspace/drift_entries.jsonl
               
               return 2
             else
@@ -144,14 +151,16 @@ steps:
               cd "$dir"
               terragrunt show -no-color /tmp/tgplan > /tmp/tg_show.log 2>&1
               
-              # Create drift entry
+              # Sanitize the plan output and create drift entry
+              SANITIZED_PLAN=$(cat /tmp/tg_show.log | head -c 5000 | sanitize_for_json)
+              
+              # Create drift entry with properly escaped JSON
               jq -n \
                 --arg repo "$repo_name" \
                 --arg path "$relative_path" \
                 --arg type "terragrunt" \
-                --arg plan "$(cat /tmp/tg_show.log)" \
-                '{repository: $repo, path: $path, type: $type, changes: $plan}' \
-                >> /workspace/drift_summary.json
+                --argjson plan "$SANITIZED_PLAN" \
+                '{repository: $repo, path: $path, type: $type, changes: $plan}' >> /workspace/drift_entries.jsonl
               
               return 2
             else
@@ -208,9 +217,9 @@ steps:
           fi
         done
 
-        # Consolidate drift summary
-        if [ -s /workspace/drift_summary.json ]; then
-          jq -s '.' /workspace/drift_summary.json > /workspace/drift_report.json
+        # Consolidate drift entries into a proper JSON array
+        if [ -f /workspace/drift_entries.jsonl ]; then
+          jq -s '.' /workspace/drift_entries.jsonl > /workspace/drift_report.json
         else
           echo "[]" > /workspace/drift_report.json
         fi
