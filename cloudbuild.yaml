@@ -320,7 +320,7 @@ steps:
                 ]
               }')
             
-            NOTIFICATION=$(echo "$NOTIFICATION" | jq ".cards[0].sections += [$DRIFT_SECTION]")
+            NOTIFICATION=$(echo "$$NOTIFICATION" | jq ".cards[0].sections += [$$DRIFT_SECTION]")
           done
           
           # Add action buttons section
