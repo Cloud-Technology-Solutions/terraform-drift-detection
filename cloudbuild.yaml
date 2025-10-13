@@ -353,10 +353,10 @@ steps:
               }]
             }')
           
-          NOTIFICATION=$(echo "$$NOTIFICATION" | jq ".cards[0].sections += [$BUTTONS_SECTION]")
+          NOTIFICATION=$(echo "$$NOTIFICATION" | jq ".cards[0].sections += [$$BUTTONS_SECTION]")
           
           # Send notification
-          echo "$$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+          echo "$$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
           
         else
           # No drift detected - send success message
