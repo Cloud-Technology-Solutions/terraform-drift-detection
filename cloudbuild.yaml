@@ -346,7 +346,7 @@ steps:
             }')
           
           # Send notification
-          echo "$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
+          echo "$$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
           
         else
           # No drift detected - send success message
@@ -384,7 +384,7 @@ steps:
               }]
             }')
           
-          echo "$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
+          echo "$$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
         fi
         
         echo "Notification sent successfully"
