@@ -294,8 +294,8 @@ steps:
           
           # Build complete notification JSON
           NOTIFICATION=$(jq -n \
-            --arg drift_count "$DRIFT_COUNT" \
-            --arg build_url "$BUILD_URL" \
+            --arg drift_count "$$DRIFT_COUNT" \
+            --arg build_url "$$BUILD_URL" \
             --arg project_id "${PROJECT_ID}" \
             --argjson sections "$$DRIFT_SECTIONS" \
             '{
