@@ -16,7 +16,7 @@ steps:
         chmod 700 ~/.ssh
         
         # Access SSH key using gcloud
-        gcloud secrets versions access latest --secret=${_SSH_KEY_SECRET} > ~/.ssh/id_rsa
+        gcloud secrets versions access latest --secret=$${_SSH_KEY_SECRET} > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         
         # Add known hosts for major git providers
@@ -27,16 +27,16 @@ steps:
         export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no"
         
         # Clone all repositories
-        echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
-          name=$(echo "$repo" | jq -r '.name')
-          url=$(echo "$repo" | jq -r '.url')
-          branch=$(echo "$repo" | jq -r '.branch')
+        echo '$${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
+          name=$$(echo "$$repo" | jq -r '.name')
+          url=$$(echo "$$repo" | jq -r '.url')
+          branch=$$(echo "$$repo" | jq -r '.branch')
           
-          echo "Cloning repository: $name (branch: $branch)"
-          git clone --branch "$branch" --depth 1 "$url" "/workspace/repos/$name"
+          echo "Cloning repository: $$name (branch: $$branch)"
+          git clone --branch "$$branch" --depth 1 "$$url" "/workspace/repos/$$name"
         done
 
-# Terraform drift detection
+  # Terraform drift detection
   - name: 'alpine:latest'
     id: 'drift-detection'
     entrypoint: 'sh'
@@ -49,12 +49,12 @@ steps:
         apk add --no-cache unzip wget jq bash
 
         # Install Terraform
-        wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
+        wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/$${_TERRAFORM_VERSION}/terraform_$${_TERRAFORM_VERSION}_linux_amd64.zip
         unzip /tmp/terraform.zip -d /usr/local/bin/
         
         # Install Terragrunt
         wget -qO /usr/local/bin/terragrunt \
-          https://github.com/gruntwork-io/terragrunt/releases/download/v${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
+          https://github.com/gruntwork-io/terragrunt/releases/download/v$${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
         chmod +x /usr/local/bin/terragrunt
 
         # Initialize tracking files
@@ -63,30 +63,24 @@ steps:
 
         # Function to find all directories with main.tf
         find_terraform_dirs() {
-          local base_dir="$1"
-          find "$base_dir" -type f -name "main.tf" -exec dirname {} \; | sort -u
+          local base_dir="$$1"
+          find "$$base_dir" -type f -name "main.tf" -exec dirname {} \; | sort -u
         }
 
         # Function to find all directories with terragrunt.hcl
         find_terragrunt_dirs() {
-          local base_dir="$1"
-          find "$base_dir" -type f -name "terragrunt.hcl" -exec dirname {} \; | sort -u
-        }
-
-        # Function to sanitize text for JSON (remove control characters)
-        sanitize_for_json() {
-          # Remove all control characters except newline and tab, then escape for JSON using jq
-          tr -d '\000-\010\013-\037\177' | jq -Rs .
+          local base_dir="$$1"
+          find "$$base_dir" -type f -name "terragrunt.hcl" -exec dirname {} \; | sort -u
         }
 
         # Function to run terraform plan and capture drift
         run_terraform_plan() {
-          local dir="$1"
-          local repo_name="$2"
-          local relative_path="${dir#/workspace/repos/$repo_name/}"
+          local dir="$$1"
+          local repo_name="$$2"
+          local relative_path="$${dir#/workspace/repos/$$repo_name/}"
           
-          echo "Running Terraform plan in: $dir"
-          cd "$dir"
+          echo "Running Terraform plan in: $$dir"
+          cd "$$dir"
           
           # Initialize Terraform
           if ! terraform init -input=false > /tmp/tf_init.log 2>&1; then
@@ -100,28 +94,29 @@ steps:
             echo "  ✓ No drift detected"
             return 0
           else
-            exit_code=$?
-            if [ $exit_code -eq 2 ]; then
+            exit_code=$$?
+            if [ $$exit_code -eq 2 ]; then
               echo "  ⚠️  DRIFT DETECTED!"
               echo "true" > /workspace/drift_detected.txt
               
-              # Extract plan changes
+              # Extract plan changes and sanitize
               terraform show -no-color /tmp/tfplan > /tmp/tf_show.log 2>&1
               
-              # Sanitize the plan output and create drift entry
-              SANITIZED_PLAN=$(cat /tmp/tf_show.log | head -c 5000 | sanitize_for_json)
+              # Sanitize the plan output by removing control characters
+              SANITIZED_PLAN=$$(cat /tmp/tf_show.log | tr -d '\000-\031' | head -c 1000)
               
-              # Create drift entry with properly escaped JSON
+              # Create drift entry
               jq -n \
-                --arg repo "$repo_name" \
-                --arg path "$relative_path" \
+                --arg repo "$$repo_name" \
+                --arg path "$$relative_path" \
                 --arg type "terraform" \
-                --argjson plan "$$SANITIZED_PLAN" \
-                '{repository: $repo, path: $path, type: $type, changes: $plan}' >> /workspace/drift_entries.jsonl
+                --arg plan "$$SANITIZED_PLAN" \
+                '{repository: $$repo, path: $$path, type: $$type, changes: $$plan}' \
+                >> /workspace/drift_entries.json
               
               return 2
             else
-              echo "  ⚠️  Plan failed with exit code: $exit_code"
+              echo "  ⚠️  Plan failed with exit code: $$exit_code"
               cat /tmp/tf_plan.log
               return 1
             fi
@@ -130,113 +125,115 @@ steps:
 
         # Function to run terragrunt plan and capture drift
         run_terragrunt_plan() {
-          local dir="$1"
-          local repo_name="$2"
-          local relative_path="${dir#/workspace/repos/$repo_name/}"
+          local dir="$$1"
+          local repo_name="$$2"
+          local relative_path="$${dir#/workspace/repos/$$repo_name/}"
           
-          echo "Running Terragrunt plan in: $dir"
-          cd "$dir"
+          echo "Running Terragrunt plan in: $$dir"
+          cd "$$dir"
           
           # Run terragrunt plan
           if terragrunt plan -detailed-exitcode -no-color -out=/tmp/tgplan > /tmp/tg_plan.log 2>&1; then
             echo "  ✓ No drift detected"
             return 0
           else
-            exit_code=$?
-            if [ $exit_code -eq 2 ]; then
+            exit_code=$$?
+            if [ $$exit_code -eq 2 ]; then
               echo "  ⚠️  DRIFT DETECTED!"
               echo "true" > /workspace/drift_detected.txt
               
-              # Extract plan changes
-              cd "$dir"
+              # Extract plan changes and sanitize
+              cd "$$dir"
               terragrunt show -no-color /tmp/tgplan > /tmp/tg_show.log 2>&1
               
-              # Sanitize the plan output and create drift entry
-              SANITIZED_PLAN=$(cat /tmp/tg_show.log | head -c 5000 | sanitize_for_json)
+              # Sanitize the plan output by removing control characters
+              SANITIZED_PLAN=$$(cat /tmp/tg_show.log | tr -d '\000-\031' | head -c 1000)
               
-              # Create drift entry with properly escaped JSON
+              # Create drift entry
               jq -n \
-                --arg repo "$repo_name" \
-                --arg path "$relative_path" \
+                --arg repo "$$repo_name" \
+                --arg path "$$relative_path" \
                 --arg type "terragrunt" \
-                --argjson plan "$$SANITIZED_PLAN" \
-                '{repository: $repo, path: $path, type: $type, changes: $plan}' >> /workspace/drift_entries.jsonl
+                --arg plan "$$SANITIZED_PLAN" \
+                '{repository: $$repo, path: $$path, type: $$type, changes: $$plan}' \
+                >> /workspace/drift_entries.json
               
               return 2
             else
-              echo "  ⚠️  Plan failed with exit code: $exit_code"
+              echo "  ⚠️  Plan failed with exit code: $$exit_code"
               cat /tmp/tg_plan.log
               return 1
             fi
           fi
         }
 
+        # Initialize drift entries file
+        echo "[]" > /workspace/drift_entries.json
+
         # Process each repository
-        echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
-          repo_name=$(echo "$repo" | jq -r '.name')
-          repo_type=$(echo "$repo" | jq -r '.type')
-          repo_path="/workspace/repos/$repo_name"
+        echo '$${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
+          repo_name=$$(echo "$$repo" | jq -r '.name')
+          repo_type=$$(echo "$$repo" | jq -r '.type')
+          repo_path="/workspace/repos/$$repo_name"
           
           echo ""
           echo "================================================"
-          echo "Processing repository: $repo_name (type: $repo_type)"
+          echo "Processing repository: $$repo_name (type: $$repo_type)"
           echo "================================================"
           
-          if [ ! -d "$repo_path" ]; then
-            echo "⚠️  Repository path not found: $repo_path"
+          if [ ! -d "$$repo_path" ]; then
+            echo "⚠️  Repository path not found: $$repo_path"
             continue
           fi
           
-          if [ "$repo_type" = "terraform" ]; then
+          if [ "$$repo_type" = "terraform" ]; then
             # Find all directories with main.tf
-            tf_dirs=$(find_terraform_dirs "$repo_path")
+            tf_dirs=$$(find_terraform_dirs "$$repo_path")
             
-            if [ -z "$tf_dirs" ]; then
-              echo "No main.tf files found in $repo_name"
+            if [ -z "$$tf_dirs" ]; then
+              echo "No main.tf files found in $$repo_name"
               continue
             fi
             
-            echo "$tf_dirs" | while IFS= read -r tf_dir; do
-              run_terraform_plan "$tf_dir" "$repo_name" || true
+            echo "$$tf_dirs" | while IFS= read -r tf_dir; do
+              run_terraform_plan "$$tf_dir" "$$repo_name" || true
             done
             
-          elif [ "$repo_type" = "terragrunt" ]; then
+          elif [ "$$repo_type" = "terragrunt" ]; then
             # Find all directories with terragrunt.hcl
-            tg_dirs=$(find_terragrunt_dirs "$repo_path")
+            tg_dirs=$$(find_terragrunt_dirs "$$repo_path")
             
-            if [ -z "$tg_dirs" ]; then
-              echo "No terragrunt.hcl files found in $repo_name"
+            if [ -z "$$tg_dirs" ]; then
+              echo "No terragrunt.hcl files found in $$repo_name"
               continue
             fi
             
-            echo "$tg_dirs" | while IFS= read -r tg_dir; do
-              run_terragrunt_plan "$tg_dir" "$repo_name" || true
+            echo "$$tg_dirs" | while IFS= read -r tg_dir; do
+              run_terragrunt_plan "$$tg_dir" "$$repo_name" || true
             done
           else
-            echo "⚠️  Unknown repository type: $repo_type"
+            echo "⚠️  Unknown repository type: $$repo_type"
           fi
         done
 
-        # Consolidate drift entries into a proper JSON array
-        if [ -f /workspace/drift_entries.jsonl ]; then
-          jq -s '.' /workspace/drift_entries.jsonl > /workspace/drift_report.json
-        else
-          echo "[]" > /workspace/drift_report.json
+        # Consolidate drift entries into report
+        if [ -s /workspace/drift_entries.json ]; then
+          jq -s '.' /workspace/drift_entries.json > /workspace/drift_report.json
         fi
 
         echo ""
         echo "================================================"
         echo "Drift Detection Summary"
         echo "================================================"
-        drift_detected=$(cat /workspace/drift_detected.txt)
-        if [ "$drift_detected" = "true" ]; then
+        drift_detected=$$(cat /workspace/drift_detected.txt)
+        if [ "$$drift_detected" = "true" ]; then
           echo "⚠️  DRIFT DETECTED in one or more repositories"
-          jq -r '.[] | "  - \(.repository)/\(.path) (\(.type))"' /workspace/drift_report.json
+          jq -r '.[] | "  - $$.repository)/$$.path) ($$.type)"' /workspace/drift_report.json
         else
           echo "✓ No drift detected across all repositories"
         fi
 
-# Send notifications
+  # Send notifications
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'send-notification'
     entrypoint: 'sh'
@@ -249,176 +246,101 @@ steps:
         apt-get update && apt-get install -y jq
         
         # Read variables
-        DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
-        WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
+        DRIFT_DETECTED=$$(cat /workspace/drift_detected.txt)
+        WEBHOOK_URL=$$(gcloud secrets versions access latest --secret=$${_CHAT_WEBHOOK_SECRET})
         
         if [ "$$DRIFT_DETECTED" = "true" ]; then
           # Read drift report
-          DRIFT_COUNT=$(jq 'length' /workspace/drift_report.json)
+          DRIFT_COUNT=$$(/usr/bin/jq 'length' /workspace/drift_report.json)
           
-          # Build base notification structure
-          jq -n \
-            --arg title "⚠️ Terraform Drift Detected" \
-            --arg subtitle "Found $$DRIFT_COUNT location(s) with configuration drift" \
+          # Build notification payload using jq for proper JSON formatting
+          /usr/bin/jq -n \
+            --arg drift_count "$$DRIFT_COUNT" \
+            --arg project_id "$$PROJECT_ID" \
             '{
-              text: $title,
-              cards: [{
-                header: {
-                  title: "🔍 Drift Detection Report",
-                  subtitle: $subtitle,
-                  imageUrl: "https://www.gstatic.com/images/icons/material/system/2x/warning_amber_24dp.png"
+              "text": "⚠️ *Terraform Drift Detected*",
+              "cards": [{
+                "header": {
+                  "title": "🔍 Drift Detection Report",
+                  "subtitle": "Found \($$drift_count) location(s) with configuration drift",
+                  "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/warning_amber_24dp.png"
                 },
-                sections: []
+                "sections": [
+                  {
+                    "widgets": [{
+                      "textParagraph": {
+                        "text": "<font color=\"#FF0000\"><b>⚠️ Configuration drift detected!</b></font><br>Your infrastructure state differs from the code in the following locations:"
+                      }
+                    }]
+                  },
+                  {
+                    "widgets": [{
+                      "buttons": [
+                        {
+                          "textButton": {
+                            "text": "📋 View Build Logs",
+                            "onClick": {
+                              "openLink": {
+                                "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=\($$project_id)"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "textButton": {
+                            "text": "📊 View All Builds",
+                            "onClick": {
+                              "openLink": {
+                                "url": "https://console.cloud.google.com/cloud-build/builds?project=\($$project_id)"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }]
+                  }
+                ]
               }]
             }' > /tmp/notification.json
-          
-          # Add summary section
-          jq -n '{
-            widgets: [{
-              textParagraph: {
-                text: "<font color=\"#FF0000\"><b>⚠️ Configuration drift detected!</b></font><br>Your infrastructure state differs from the code in the following locations:"
-              }
-            }]
-          }' > /tmp/summary_section.json
-          
-          jq '.cards[0].sections += [input]' /tmp/notification.json /tmp/summary_section.json > /tmp/notification_tmp.json
-          mv /tmp/notification_tmp.json /tmp/notification.json
-          
-          # Add each drift location as a section (WITHOUT showing plan details)
-          jq -c '.[]' /workspace/drift_report.json | while IFS= read -r drift; do
-            REPO=$(echo "$drift" | jq -r '.repository')
-            PATH=$(echo "$drift" | jq -r '.path')
-            TYPE=$(echo "$drift" | jq -r '.type')
-            
-            # Count changes (rough estimate)
-            CHANGE_COUNT=$(echo "$drift" | jq -r '.changes' | grep -c "^[[:space:]]*[+~-]" || echo "unknown")
-            
-            # Create section for this drift WITHOUT the full plan output
-            jq -n \
-              --arg repo "$$REPO" \
-              --arg path "$$PATH" \
-              --arg type "$$TYPE" \
-              --arg changes "$$CHANGE_COUNT" \
-              '{
-                widgets: [
-                  {
-                    keyValue: {
-                      topLabel: "Repository",
-                      content: $repo,
-                      icon: "BOOKMARK"
-                    }
-                  },
-                  {
-                    keyValue: {
-                      topLabel: "Path",
-                      content: $path,
-                      icon: "MAP_PIN"
-                    }
-                  },
-                  {
-                    keyValue: {
-                      topLabel: "Type",
-                      content: $type,
-                      contentMultiline: false
-                    }
-                  },
-                  {
-                    keyValue: {
-                      topLabel: "Estimated Changes",
-                      content: $changes,
-                      contentMultiline: false
-                    }
-                  },
-                  {
-                    textParagraph: {
-                      text: "<font color=\"#666666\"><i>View full plan details in Cloud Build logs</i></font>"
-                    }
-                  }
-                ]
-              }' > /tmp/drift_section.json
-            
-            jq '.cards[0].sections += [input]' /tmp/notification.json /tmp/drift_section.json > /tmp/notification_tmp.json
-            mv /tmp/notification_tmp.json /tmp/notification.json
-          done
-          
-          # Add action buttons section
-          jq -n \
-            --arg project_id "${PROJECT_ID}" \
-            '{
-              widgets: [{
-                buttons: [
-                  {
-                    textButton: {
-                      text: "📋 View Build Logs",
-                      onClick: {
-                        openLink: {
-                          url: ("https://console.cloud.google.com/cloud-build/builds;region=global?project=" + $project_id)
-                        }
-                      }
-                    }
-                  },
-                  {
-                    textButton: {
-                      text: "📊 View All Builds",
-                      onClick: {
-                        openLink: {
-                          url: ("https://console.cloud.google.com/cloud-build/builds?project=" + $project_id)
-                        }
-                      }
-                    }
-                  }
-                ]
-              }]
-            }' > /tmp/buttons_section.json
-          
-          jq '.cards[0].sections += [input]' /tmp/notification.json /tmp/buttons_section.json > /tmp/notification_tmp.json
-          mv /tmp/notification_tmp.json /tmp/notification.json
-          
-          # Debug: check the JSON is valid
-          if ! jq . /tmp/notification.json > /dev/null 2>&1; then
-            echo "ERROR: Generated invalid JSON"
-            cat /tmp/notification.json
-            exit 1
-          fi
           
           # Send notification
           curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @/tmp/notification.json
           
         else
           # No drift detected - send success message
-          jq -n \
-            --arg project_id "${PROJECT_ID}" \
-            '{
-              text: "✅ No Drift Detected",
-              cards: [{
-                header: {
-                  title: "✅ Infrastructure In Sync",
-                  subtitle: "All repositories match their infrastructure state",
-                  imageUrl: "https://www.gstatic.com/images/icons/material/system/2x/check_circle_24dp.png"
+          curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @- <<EOF
+        {
+          "text": "✅ *No Drift Detected*",
+          "cards": [{
+            "header": {
+              "title": "✅ Infrastructure In Sync",
+              "subtitle": "All repositories match their infrastructure state",
+              "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/check_circle_24dp.png"
+            },
+            "sections": [{
+              "widgets": [
+                {
+                  "textParagraph": {
+                    "text": "<font color=\"#34A853\"><b>✓ No configuration drift detected</b></font><br>All monitored repositories are in sync with their infrastructure state."
+                  }
                 },
-                sections: [{
-                  widgets: [
-                    {
-                      textParagraph: {
-                        text: "<font color=\"#34A853\"><b>✓ No configuration drift detected</b></font><br>All monitored repositories are in sync with their infrastructure state."
-                      }
-                    },
-                    {
-                      buttons: [{
-                        textButton: {
-                          text: "📋 View Build Logs",
-                          onClick: {
-                            openLink: {
-                              url: ("https://console.cloud.google.com/cloud-build/builds;region=global?project=" + $project_id)
-                            }
-                          }
+                {
+                  "buttons": [{
+                    "textButton": {
+                      "text": "📋 View Build Logs",
+                      "onClick": {
+                        "openLink": {
+                          "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=$$PROJECT_ID"
                         }
-                      }]
+                      }
                     }
-                  ]
-                }]
-              }]
-            }' | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
+                  }]
+                }
+              ]
+            }]
+          }]
+        }
+        EOF
         fi
         
         echo "Notification sent successfully"
