@@ -280,6 +280,7 @@ steps:
             PATH=$(echo "$drift" | /usr/bin/jq -r '.path')
             TYPE=$(echo "$drift" | /usr/bin/jq -r '.type')
             CHANGES=$(echo "$drift" | /usr/bin/jq -r '.changes' | head -n 50)
+            ENCODED=$(echo "$$CHANGES" | base64 | tr -d '\n')
             
             # Add comma separator if not first item
             if [ "$$FIRST" = "false" ]; then
@@ -314,7 +315,7 @@ steps:
                   },
                   {
                     "textParagraph": {
-                      "text": "<font color=\"#666666\"><pre>$(echo "$$CHANGES" | sed 's/"/\\"/g' | tr '\n' ' ' | head -c 1000)...</pre></font>"
+                      "text": "<font color=\"#666666\"><pre>$(echo "$ENCODED" | head -c 1000)...</pre></font>"
                     }
                   }
                 ]
