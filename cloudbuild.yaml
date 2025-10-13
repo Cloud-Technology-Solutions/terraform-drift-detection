@@ -227,7 +227,8 @@ steps:
           echo "✓ No drift detected across all repositories"
         fi
 
-  # Send notifications
+
+# Send notifications
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'send-notification'
     entrypoint: 'sh'
@@ -245,158 +246,153 @@ steps:
         
         if [ "$$DRIFT_DETECTED" = "true" ]; then
           # Read drift report
-          DRIFT_COUNT=$(/usr/bin/jq 'length' /workspace/drift_report.json)
+          DRIFT_COUNT=$(jq 'length' /workspace/drift_report.json)
           
-          # Build notification payload
-          NOTIFICATION=$(cat <<EOF
-        {
-          "text": "⚠️ *Terraform Drift Detected*",
-          "cards": [{
-            "header": {
-              "title": "🔍 Drift Detection Report",
-              "subtitle": "Found $$DRIFT_COUNT location(s) with configuration drift",
-              "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/warning_amber_24dp.png"
-            },
-            "sections": [
-        EOF
-          )
+          # Build base notification structure
+          NOTIFICATION=$(jq -n \
+            --arg title "⚠️ Terraform Drift Detected" \
+            --arg subtitle "Found $$DRIFT_COUNT location(s) with configuration drift" \
+            '{
+              text: $title,
+              cards: [{
+                header: {
+                  title: "🔍 Drift Detection Report",
+                  subtitle: $subtitle,
+                  imageUrl: "https://www.gstatic.com/images/icons/material/system/2x/warning_amber_24dp.png"
+                },
+                sections: []
+              }]
+            }')
           
           # Add summary section
-          NOTIFICATION="$$NOTIFICATION"$(cat <<'EOF'
-              {
-                "widgets": [{
-                  "textParagraph": {
-                    "text": "<font color=\"#FF0000\"><b>⚠️ Configuration drift detected!</b></font><br>Your infrastructure state differs from the code in the following locations:"
-                  }
-                }]
-              },
-        EOF
-          )
+          SUMMARY_SECTION=$(jq -n '{
+            widgets: [{
+              textParagraph: {
+                text: "<font color=\"#FF0000\"><b>⚠️ Configuration drift detected!</b></font><br>Your infrastructure state differs from the code in the following locations:"
+              }
+            }]
+          }')
+          
+          NOTIFICATION=$(echo "$$NOTIFICATION" | jq ".cards[0].sections += [$SUMMARY_SECTION]")
           
           # Add each drift location as a section
-          FIRST=true
-          /usr/bin/jq -c '.[]' /workspace/drift_report.json | while IFS= read -r drift; do
-            REPO=$(echo "$drift" | /usr/bin/jq -r '.repository')
-            PATH=$(echo "$drift" | /usr/bin/jq -r '.path')
-            TYPE=$(echo "$drift" | /usr/bin/jq -r '.type')
-            CHANGES=$(echo "$drift" | /usr/bin/jq -r '.changes' | head -n 50)
-            ENCODED=$(echo "$$CHANGES" | base64 | tr -d '\n')
+          jq -c '.[]' /workspace/drift_report.json | while IFS= read -r drift; do
+            REPO=$(echo "$drift" | jq -r '.repository')
+            PATH=$(echo "$drift" | jq -r '.path')
+            TYPE=$(echo "$drift" | jq -r '.type')
+            # Properly escape changes for JSON - take first 800 chars and escape
+            CHANGES=$(echo "$drift" | jq -r '.changes' | head -c 800 | jq -Rs .)
             
-            # Add comma separator if not first item
-            if [ "$$FIRST" = "false" ]; then
-              echo "," >> /tmp/sections.json
-            fi
-            FIRST=false
-            
-            # Create section for this drift
-            cat <<EOF >> /tmp/sections.json
-              {
-                "widgets": [
+            # Create section for this drift using jq to handle escaping
+            DRIFT_SECTION=$(jq -n \
+              --arg repo "$REPO" \
+              --arg path "$PATH" \
+              --arg type "$TYPE" \
+              --argjson changes "$$CHANGES" \
+              '{
+                widgets: [
                   {
-                    "keyValue": {
-                      "topLabel": "Repository",
-                      "content": "$$REPO",
-                      "icon": "BOOKMARK"
+                    keyValue: {
+                      topLabel: "Repository",
+                      content: $$repo,
+                      icon: "BOOKMARK"
                     }
                   },
                   {
-                    "keyValue": {
-                      "topLabel": "Path",
-                      "content": "$$PATH",
-                      "icon": "MAP_PIN"
+                    keyValue: {
+                      topLabel: "Path",
+                      content: $path,
+                      icon: "MAP_PIN"
                     }
                   },
                   {
-                    "keyValue": {
-                      "topLabel": "Type",
-                      "content": "$$TYPE",
-                      "contentMultiline": false
+                    keyValue: {
+                      topLabel: "Type",
+                      content: $$type,
+                      contentMultiline: false
                     }
                   },
                   {
-                    "textParagraph": {
-                      "text": "<font color=\"#666666\"><pre>$(echo "$$ENCODED" | head -c 1000)...</pre></font>"
+                    textParagraph: {
+                      text: ("<font color=\"#666666\"><pre>" + $$changes + "...</pre></font>")
                     }
                   }
                 ]
-              }
-        EOF
+              }')
+            
+            NOTIFICATION=$(echo "$NOTIFICATION" | jq ".cards[0].sections += [$DRIFT_SECTION]")
           done
           
-          # Close sections array and add action buttons
-          NOTIFICATION="$$NOTIFICATION"$(cat /tmp/sections.json 2>/dev/null || echo "")
-          NOTIFICATION="$$NOTIFICATION"$(cat <<EOF
-              ,
-              {
-                "widgets": [{
-                  "buttons": [
-                    {
-                      "textButton": {
-                        "text": "📋 View Build Logs",
-                        "onClick": {
-                          "openLink": {
-                            "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=${PROJECT_ID}"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "textButton": {
-                        "text": "📊 View All Builds",
-                        "onClick": {
-                          "openLink": {
-                            "url": "https://console.cloud.google.com/cloud-build/builds?project=${PROJECT_ID}"
-                          }
+          # Add action buttons section
+          BUTTONS_SECTION=$(jq -n \
+            --arg project_id "${PROJECT_ID}" \
+            '{
+              widgets: [{
+                buttons: [
+                  {
+                    textButton: {
+                      text: "📋 View Build Logs",
+                      onClick: {
+                        openLink: {
+                          url: ("https://console.cloud.google.com/cloud-build/builds;region=global?project=" + $project_id)
                         }
                       }
                     }
-                  ]
-                }]
-              }
-            ]
-          }]
-        }
-        EOF
-          )
+                  },
+                  {
+                    textButton: {
+                      text: "📊 View All Builds",
+                      onClick: {
+                        openLink: {
+                          url: ("https://console.cloud.google.com/cloud-build/builds?project=" + $project_id)
+                        }
+                      }
+                    }
+                  }
+                ]
+              }]
+            }')
+          
+          NOTIFICATION=$(echo "$NOTIFICATION" | jq ".cards[0].sections += [$BUTTONS_SECTION]")
           
           # Send notification
-          echo "$$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
+          echo "$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
           
         else
           # No drift detected - send success message
-          curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @- <<EOF
-        {
-          "text": "✅ *No Drift Detected*",
-          "cards": [{
-            "header": {
-              "title": "✅ Infrastructure In Sync",
-              "subtitle": "All repositories match their infrastructure state",
-              "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/check_circle_24dp.png"
-            },
-            "sections": [{
-              "widgets": [
-                {
-                  "textParagraph": {
-                    "text": "<font color=\"#34A853\"><b>✓ No configuration drift detected</b></font><br>All monitored repositories are in sync with their infrastructure state."
-                  }
+          jq -n \
+            --arg project_id "${PROJECT_ID}" \
+            '{
+              text: "✅ No Drift Detected",
+              cards: [{
+                header: {
+                  title: "✅ Infrastructure In Sync",
+                  subtitle: "All repositories match their infrastructure state",
+                  imageUrl: "https://www.gstatic.com/images/icons/material/system/2x/check_circle_24dp.png"
                 },
-                {
-                  "buttons": [{
-                    "textButton": {
-                      "text": "📋 View Build Logs",
-                      "onClick": {
-                        "openLink": {
-                          "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=${PROJECT_ID}"
-                        }
+                sections: [{
+                  widgets: [
+                    {
+                      textParagraph: {
+                        text: "<font color=\"#34A853\"><b>✓ No configuration drift detected</b></font><br>All monitored repositories are in sync with their infrastructure state."
                       }
+                    },
+                    {
+                      buttons: [{
+                        textButton: {
+                          text: "📋 View Build Logs",
+                          onClick: {
+                            openLink: {
+                              url: ("https://console.cloud.google.com/cloud-build/builds;region=global?project=" + $project_id)
+                            }
+                          }
+                        }
+                      }]
                     }
-                  }]
-                }
-              ]
-            }]
-          }]
-        }
-        EOF
+                  ]
+                }]
+              }]
+            }' | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
         fi
         
         echo "Notification sent successfully"
