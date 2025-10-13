@@ -273,7 +273,7 @@ steps:
             }]
           }')
           
-          NOTIFICATION=$(echo "$$NOTIFICATION" | jq ".cards[0].sections += [$SUMMARY_SECTION]")
+          NOTIFICATION=$(echo "$$NOTIFICATION" | jq ".cards[0].sections += [$$SUMMARY_SECTION]")
           
           # Add each drift location as a section
           jq -c '.[]' /workspace/drift_report.json | while IFS= read -r drift; do
