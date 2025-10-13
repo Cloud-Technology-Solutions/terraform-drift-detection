@@ -285,9 +285,9 @@ steps:
             
             # Create section for this drift using jq to handle escaping
             DRIFT_SECTION=$(jq -n \
-              --arg repo "$REPO" \
-              --arg path "$PATH" \
-              --arg type "$TYPE" \
+              --arg repo "$$REPO" \
+              --arg path "$$PATH" \
+              --arg type "$$TYPE" \
               --argjson changes "$$CHANGES" \
               '{
                 widgets: [
