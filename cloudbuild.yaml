@@ -280,8 +280,13 @@ steps:
             REPO=$(echo "$drift" | jq -r '.repository')
             PATH=$(echo "$drift" | jq -r '.path')
             TYPE=$(echo "$drift" | jq -r '.type')
-            # Properly escape changes for JSON - take first 800 chars and escape
-            CHANGES=$(echo "$drift" | jq -r '.changes' | head -c 800 | jq -Rs .)
+            
+            # Sanitize changes: remove all control characters except newline/tab, then escape for JSON
+            CHANGES=$(echo "$drift" | jq -r '.changes' | \
+              tr -d '\000-\011\013-\037' | \
+              head -c 800 | \
+              jq -Rs . | \
+              sed 's/^"//; s/"$//')
             
             # Create section for this drift using jq to handle escaping
             DRIFT_SECTION=$(jq -n \
