@@ -244,7 +244,7 @@ steps:
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         BUILD_URL="https://console.cloud.google.com/cloud-build/builds;region=global/${BUILD_ID}?project=${PROJECT_ID}"
         
-        if [ "$DRIFT_DETECTED" = "true" ]; then
+        if [ "$$DRIFT_DETECTED" = "true" ]; then
           # Verify drift report exists and has content
           if [ ! -s /workspace/drift_report.json ]; then
             echo "Error: Drift detected but no drift report found"
@@ -346,12 +346,12 @@ steps:
             }')
           
           # Send notification
-          echo "$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+          echo "$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
           
         else
           # No drift detected - send success message
           NOTIFICATION=$(jq -n \
-            --arg build_url "$BUILD_URL" \
+            --arg build_url "$$BUILD_URL" \
             '{
               "text": "✅ *No Drift Detected*",
               "cards": [{
@@ -384,7 +384,7 @@ steps:
               }]
             }')
           
-          echo "$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+          echo "$NOTIFICATION" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
         fi
         
         echo "Notification sent successfully"
