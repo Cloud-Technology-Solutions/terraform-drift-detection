@@ -103,17 +103,15 @@ steps:
               terraform show -no-color /tmp/tfplan 2>&1 | head -n 30 > /tmp/tf_show_short.log
               
               # Add to drift report using jq (properly escapes strings)
+              # Use a unique filename to avoid conflicts
+              local drift_file="/workspace/drift_$$.json"
               jq -n \
-                --arg repo "$$repo_name" \
-                --arg path "$$relative_path" \
+                --arg repo "$repo_name" \
+                --arg path "$relative_path" \
                 --arg type "terraform" \
-                --arg changes "$$(cat /tmp/tf_show_short.log)" \
-                '{repository: $$repo, path: $$path, type: $$type, changes: $$changes}' \
-                > /tmp/drift_entry.json
-              
-              # Append to report
-              jq -s '. + [input]' /workspace/drift_report.json /tmp/drift_entry.json > /tmp/drift_report_new.json
-              mv /tmp/drift_report_new.json /workspace/drift_report.json
+                --arg changes "$(cat /tmp/tf_show_short.log)" \
+                '{repository: $repo, path: $path, type: $type, changes: $changes}' \
+                > "$drift_file"
               
               return 2
             else
@@ -148,17 +146,15 @@ steps:
               terragrunt show -no-color /tmp/tgplan 2>&1 | head -n 30 > /tmp/tg_show_short.log
               
               # Add to drift report using jq (properly escapes strings)
+              # Use a unique filename to avoid conflicts
+              local drift_file="/workspace/drift_$$.json"
               jq -n \
-                --arg repo "$$repo_name" \
-                --arg path "$$relative_path" \
+                --arg repo "$repo_name" \
+                --arg path "$relative_path" \
                 --arg type "terragrunt" \
-                --arg changes "$$(cat /tmp/tg_show_short.log)" \
-                '{repository: $$repo, path: $$path, type: $$type, changes: $$changes}' \
-                > /tmp/drift_entry.json
-              
-              # Append to report
-              jq -s '. + [input]' /workspace/drift_report.json /tmp/drift_entry.json > /tmp/drift_report_new.json
-              mv /tmp/drift_report_new.json /workspace/drift_report.json
+                --arg changes "$(cat /tmp/tg_show_short.log)" \
+                '{repository: $repo, path: $path, type: $type, changes: $changes}' \
+                > "$drift_file"
               
               return 2
             else
@@ -214,6 +210,13 @@ steps:
             echo "⚠️  Unknown repository type: $$repo_type"
           fi
         done
+
+        # Consolidate all drift files into a single report
+        if ls /workspace/drift_*.json 1> /dev/null 2>&1; then
+          jq -s '.' /workspace/drift_*.json > /workspace/drift_report.json
+        else
+          echo "[]" > /workspace/drift_report.json
+        fi
 
         echo ""
         echo "================================================"
