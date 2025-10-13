@@ -362,7 +362,7 @@ steps:
           mv /tmp/notification_tmp.json /tmp/notification.json
           
           # Send notification
-          curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @/tmp/notification.json
+          curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @/tmp/notification.json
           
         else
           # No drift detected - send success message
@@ -398,7 +398,7 @@ steps:
                   ]
                 }]
               }]
-            }' | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+            }' | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
         fi
         
         echo "Notification sent successfully"
