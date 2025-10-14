@@ -358,7 +358,7 @@ steps:
                   "header": {
                     "title": "✅ Infrastructure In Sync",
                     "subtitle": "All repositories match their infrastructure state",
-                    "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/check_circle_24dp.png"
+                    "imageUrl": "https://raw.githubusercontent.com/google/material-design-icons/master/png/action/check_circle/materialicons/24dp/2x/baseline_check_circle_black_24dp.png"
                   },
                   "sections": [
                     {
