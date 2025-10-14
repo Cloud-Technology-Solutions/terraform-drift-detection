@@ -300,7 +300,7 @@ steps:
                   "header": {
                     "title": "🔍 Drift Detection Report",
                     "subtitle": "Found \($count) location(s) with configuration drift",
-                    "imageUrl": "https://www.gstatic.com/images/icons/material/system/2x/warning_amber_24dp.png"
+                    "imageUrl": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><path d='M24 6L44 38H4Z' fill='%23f59e0b'/><rect x='22' y='14' width='4' height='14' rx='1' fill='%23fff'/><circle cx='24' cy='34.5' r='2.5' fill='%23fff'/></svg>"
                   },
                   "sections": [
                     {
@@ -330,7 +330,7 @@ steps:
                                 "text": "📋 View Build Logs",
                                 "onClick": {
                                   "openLink": {
-                                    "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=\($project)"
+                                    "url": "https://console.cloud.google.com/cloud-build/builds;region=global/${BUILD_ID}?project=\($project)"
                                   }
                                 }
                               }
@@ -358,7 +358,7 @@ steps:
                   "header": {
                     "title": "✅ Infrastructure In Sync",
                     "subtitle": "All repositories match their infrastructure state",
-                    "imageUrl": "https://raw.githubusercontent.com/google/material-design-icons/master/png/action/check_circle/materialicons/24dp/2x/baseline_check_circle_black_24dp.png"
+                    "imageUrl": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'><circle cx='24' cy='24' r='22' fill='%2328a745'/><path d='M14 25.5L21.5 33L35 18.5' fill='none' stroke='%23fff' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>"
                   },
                   "sections": [
                     {
@@ -379,7 +379,7 @@ steps:
                                 "text": "📋 View Build Logs",
                                 "onClick": {
                                   "openLink": {
-                                    "url": "https://console.cloud.google.com/cloud-build/builds;region=global?project=\($project)"
+                                    "url": "https://console.cloud.google.com/cloud-build/builds;region=global/${BUILD_ID}?project=\($project)"
                                   }
                                 }
                               }
