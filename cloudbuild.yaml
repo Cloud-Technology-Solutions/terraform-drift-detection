@@ -102,12 +102,6 @@ steps:
             }
           fi
           
-          # Initialize Terraform
-          if ! terraform init -input=false > /tmp/tf_init.log 2>&1; then
-            echo "  ⚠️  Failed to initialize Terraform"
-            return 1
-          fi
-          
           # Run plan and capture output
           if terraform plan -detailed-exitcode -no-color -out=/tmp/tfplan > /tmp/tf_plan.log 2>&1; then
             echo "  ✓ No drift detected"
@@ -207,6 +201,11 @@ steps:
             fi
             
             echo "$$tf_dirs" | while IFS= read -r tf_dir; do
+              # Initialize Terraform
+              if ! terraform init -input=false >> /tmp/tf_init.log 2>&1; then
+                echo "  ⚠️  Failed to initialize Terraform in $$tf_dir"
+                return 1
+              fi
               # Get all workspaces for this directory
               workspaces=$(get_workspaces "$$tf_dir")
               echo "$$workspaces" | while IFS= read -r workspace; do
