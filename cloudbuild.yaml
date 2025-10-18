@@ -77,7 +77,7 @@ steps:
         get_workspaces() {
           local dir="$$1"
           cd "$$dir"
-          terraform workspace list 2>/dev/null | sed 's/^[* ]*//' | grep -v '^$$'
+          terraform workspace list 2>/dev/null | sed 's/^[* ]*//' | awk 'NF'
         }
 
         # Function to run terraform plan and capture drift
@@ -130,6 +130,9 @@ steps:
               return 2
             else
               echo "  ⚠️  Plan failed with exit code: $$exit_code"
+              echo "##### START PLAN LOG ####"
+              cat /tmp/tf_plan.log
+              echo "##### END PLAN LOG ####"
               return 1
             fi
           fi
