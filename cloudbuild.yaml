@@ -255,11 +255,9 @@ steps:
       - '-c'
       - |
         set -e
-        
-        # Install jq for JSON processing
+
         apt-get update && apt-get install -y jq
         
-        # Read variables
         DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
         
@@ -267,26 +265,16 @@ steps:
           # Read drift report
           DRIFT_REPORT=$(cat /workspace/drift_report.json)
           DRIFT_COUNT=$(echo "$$DRIFT_REPORT" | /usr/bin/jq 'length')
+          DRIFT_DETAILS=$(
+            echo "$$DRIFT_REPORT" | /usr/bin/jq -r '.[] | 
+              "• <b>Repo:</b> \(.repository)<br>  <b>Path:</b> \(.path)<br>  <b>Workspace:</b> \(.workspace)<br>  <b>Type:</b> \(.type)"' | 
+            tr '\n' ' ' | sed 's/<br> /<br>/g'
+          )
           
-          # Build drift details using a temporary file
-          TEMP_FILE=$(mktemp)
-          echo "$$DRIFT_REPORT" | /usr/bin/jq -c '.[]' | while IFS= read -r drift; do
-            REPO=$(echo "$$drift" | /usr/bin/jq -r '.repository')
-            PATH=$(echo "$$drift" | /usr/bin/jq -r '.path')
-            WORKSPACE=$(echo "$$drift" | /usr/bin/jq -r '.workspace')
-            TYPE=$(echo "$$drift" | /usr/bin/jq -r '.type')
-            
-            # Format the entry and append to temp file
-            echo "• <b>Repo:</b> $$REPO<br>  <b>Path:</b> $$PATH<br>  <b>Workspace:</b> $$WORKSPACE<br>  <b>Type:</b> $$TYPE" >> "$$TEMP_FILE"
-          done
-          
-          # Read the temp file content
-          if [ -s "$$TEMP_FILE" ]; then
-            DRIFT_DETAILS=$(cat "$$TEMP_FILE" | tr '\n' ' ' | sed 's/<br> /<br>/g')
-          else
+          # If DRIFT_DETAILS is empty, set a default message
+          if [ -z "$$DRIFT_DETAILS" ]; then
             DRIFT_DETAILS="No detailed information available"
           fi
-          rm -f "$$TEMP_FILE"
           
           # Create notification payload
           NOTIFICATION_PAYLOAD=$(jq -n \
