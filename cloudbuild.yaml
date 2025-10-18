@@ -125,7 +125,7 @@ steps:
                 --arg workspace "$$workspace" \
                 --arg type "terraform" \
                 '{repository: $$repo, path: $$path, workspace: $$workspace, type: $$type}' \
-                >> /workspace/drift_entries.ndjson
+                >> /workspace/drift_entries.ndjsoncd t
               
               return 2
             else
