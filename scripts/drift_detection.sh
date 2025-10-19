@@ -15,7 +15,13 @@ chmod +x /usr/local/bin/terragrunt
 
 # Initialize tracking files
 echo "false" > /workspace/drift_detected.txt
+echo "false" > /workspace/failure_detected.txt
 echo "[]" > /workspace/drift_report.json
+
+# Function to mark failure
+mark_failure() {
+  echo "true" > /workspace/failure_detected.txt
+}
 
 # Function to find all directories with main.tf
 find_terraform_dirs() {
@@ -33,8 +39,10 @@ find_terragrunt_dirs() {
 get_workspaces() {
   local dir="$1"
   cd "$dir"
-  if ! terraform init -input=false >> /tmp/tf_init.log 2>&1; then
+  if ! terraform inits -input=false >> /tmp/tf_init.log 2>&1; then
     echo "  ⚠️  Failed to initialize Terraform in $dir"
+    mark_failure
+    return 1
   fi
   terraform workspace list 2>/dev/null | sed 's/^[* ]*//' | awk 'NF'
 }
@@ -57,6 +65,7 @@ run_terraform_plan() {
   if [ "$workspace" != "default" ]; then
     terraform workspace select "$workspace" > /dev/null 2>&1 || {
       echo "  ⚠️  Failed to select workspace: $workspace"
+      mark_failure
       return 1
     }
   fi
@@ -86,6 +95,7 @@ run_terraform_plan() {
       echo "##### START PLAN LOG ####"
       cat /tmp/tf_plan.log
       echo "##### END PLAN LOG ####"
+      mark_failure
       return 1
     fi
   fi
@@ -125,6 +135,7 @@ run_terragrunt_plan() {
       return 2
     else
       echo "  ⚠️  Plan failed with exit code: $exit_code"
+      mark_failure
       return 1
     fi
   fi
@@ -146,6 +157,7 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while IFS= read -r repo; do
 
   if [ ! -d "$repo_path" ]; then
     echo "⚠️  Repository path not found: $repo_path"
+    mark_failure
     continue
   fi
 
@@ -177,6 +189,7 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while IFS= read -r repo; do
     done
   else
     echo "⚠️  Unknown repository type: $repo_type"
+    mark_failure
   fi
 done
 
@@ -197,4 +210,13 @@ if [ "$drift_detected" = "true" ]; then
   jq -r '.[] | "  - \(.repository)/\(.path) (workspace: \(.workspace), type: \(.type))"' /workspace/drift_report.json
 else
   echo "✓ No drift detected across all repositories"
+fi
+
+echo ""
+failure_detected=$(cat /workspace/failure_detected.txt)
+if [ "$failure_detected" = "true" ]; then
+  echo "⚠️  FAILURES DETECTED during execution"
+  exit 1
+else
+  echo "✓ All operations completed successfully"
 fi

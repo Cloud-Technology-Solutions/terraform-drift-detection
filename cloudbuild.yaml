@@ -39,7 +39,7 @@ steps:
         
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
 
-        if [ ! -f /workspace/drift_detected.txt ]; then
+        if [ ! -f /workspace/failure_detected.txt ]; then
           jinja2 notifications/templates/failure.json.j2 \
             -D build_id="${BUILD_ID}" \
             -D project="${PROJECT_ID}" \
