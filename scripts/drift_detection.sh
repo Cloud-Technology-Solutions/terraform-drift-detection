@@ -39,7 +39,7 @@ find_terragrunt_dirs() {
 get_workspaces() {
   local dir="$1"
   cd "$dir"
-  if ! terraform inits -input=false >> /tmp/tf_init.log 2>&1; then
+  if ! terraform init -input=false >> /tmp/tf_init.log 2>&1; then
     echo "  ⚠️  Failed to initialize Terraform in $dir"
     mark_failure
     return 1
