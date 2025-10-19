@@ -260,7 +260,7 @@ steps:
             -D project="${PROJECT_ID}" \
             -D build_id="${BUILD_ID}" \
             -D count="$${DRIFT_COUNT}" \
-            -D details="${DRIFT_DETAILS}" \
+            -D details="$${DRIFT_DETAILS}" \
             | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
 
         else
