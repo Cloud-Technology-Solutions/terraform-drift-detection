@@ -92,9 +92,6 @@ run_terraform_plan() {
       return 2
     else
       echo "  ⚠️  Plan failed with exit code: $exit_code"
-      echo "##### START PLAN LOG ####"
-      cat /tmp/tf_plan.log
-      echo "##### END PLAN LOG ####"
       mark_failure
       return 1
     fi
@@ -148,7 +145,7 @@ echo "" > /workspace/drift_entries.ndjson
 echo "${_REPOSITORIES}" | jq -c '.[]' | while IFS= read -r repo; do
   repo_name=$(echo "$repo" | jq -r '.name')
   repo_type=$(echo "$repo" | jq -r '.type')
-  repo_path="/workspace/repos/$repo_name"
+  repo_path="/workspace/repos/$repo_name/test"
 
   echo ""
   echo "================================================"

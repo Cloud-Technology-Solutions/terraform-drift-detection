@@ -38,8 +38,8 @@ steps:
         python3 -m pip install jinja2-cli
         
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
-
-        if [ ! -f /workspace/failure_detected.txt ]; then
+        FAILURE_DETECTED=$(cat /workspace/failure_detected.txt)
+        if [ "$$FAILURE_DETECTED" = "true" ]; then
           jinja2 notifications/templates/failure.json.j2 \
             -D build_id="${BUILD_ID}" \
             -D project="${PROJECT_ID}" \
