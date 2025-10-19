@@ -2,6 +2,9 @@ steps:
   - name: 'gcr.io/cloud-builders/git'
     id: 'clone-repositories'
     entrypoint: 'bash'
+    env:
+      - '_SSH_KEY_SECRET=${_SSH_KEY_SECRET}'
+      - '_REPOSITORIES=${_REPOSITORIES}'
     args:
       - '-c'
       - |
