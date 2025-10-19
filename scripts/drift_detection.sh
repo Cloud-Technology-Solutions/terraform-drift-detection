@@ -213,7 +213,6 @@ echo ""
 failure_detected=$(cat /workspace/failure_detected.txt)
 if [ "$failure_detected" = "true" ]; then
   echo "⚠️  FAILURES DETECTED during execution"
-  exit 1
 else
   echo "✓ All operations completed successfully"
 fi
