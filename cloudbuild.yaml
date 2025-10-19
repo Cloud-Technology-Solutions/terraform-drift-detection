@@ -1,47 +1,12 @@
 steps:
-  # Install dependencies first
-  - name: 'gcr.io/cloud-builders/git'
-    id: 'install-dependencies'
-    entrypoint: 'sh'
-    args:
-      - '-c'
-      - |
-        apt-get update && apt-get install -y jq
-
-  # Setup SSH configuration
-  - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'setup-ssh'
-    entrypoint: 'sh'
-    args:
-      - '-c'
-      - |
-        set -e
-        mkdir -p ~/.ssh
-        chmod 700 ~/.ssh
-        gcloud secrets versions access latest --secret=${_SSH_KEY_SECRET} > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        
-        # Add known hosts
-        ssh-keyscan -H github.com gitlab.com bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null
-
-  # Clone repositories
   - name: 'gcr.io/cloud-builders/git'
     id: 'clone-repositories'
     entrypoint: 'bash'
-    env:
-      - 'GIT_SSH_COMMAND=ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no'
     args:
       - '-c'
       - |
-        set -e
-        echo '${_REPOSITORIES}' | jq -c '.[]' | while read -r repo; do
-          name=$(echo "$repo" | jq -r '.name')
-          url=$(echo "$repo" | jq -r '.url')
-          branch=$(echo "$repo" | jq -r '.branch')
-          
-          echo "Cloning repository: $name (branch: $branch)"
-          git clone --branch "$branch" --depth 1 "$url" "/workspace/repos/$name"
-        done
+        chmod +x ./scripts/clone_repositories.sh
+        ./scripts/clone_repositories.sh
 
   # Terraform drift detection
   - name: 'alpine:latest'
@@ -55,11 +20,11 @@ steps:
         # Install dependencies
         apk add --no-cache unzip wget jq bash
 
-        # Install Terraform - FIXED: use $ for substitution variables
+        # Install Terraform
         wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
         unzip /tmp/terraform.zip -d /usr/local/bin/
         
-        # Install Terragrunt - FIXED: use $ for substitution variables
+        # Install Terragrunt
         wget -qO /usr/local/bin/terragrunt \
           https://github.com/gruntwork-io/terragrunt/releases/download/v${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
         chmod +x /usr/local/bin/terragrunt
@@ -96,7 +61,7 @@ steps:
           local repo_name="$$2"
           local workspace="$$3"
           local relative_path="$${dir#/workspace/repos/$$repo_name}"
-          relative_path="$${relative_path#/}"  # Remove leading slash if present
+          relative_path="$${relative_path#/}"
           if [ -z "$$relative_path" ]; then
             relative_path="(root)"
           fi
@@ -147,7 +112,7 @@ steps:
           local dir="$$1"
           local repo_name="$$2"
           local relative_path="$${dir#/workspace/repos/$$repo_name}"
-          relative_path="$${relative_path#/}"  # Remove leading slash if present
+          relative_path="$${relative_path#/}"
           if [ -z "$$relative_path" ]; then
             relative_path="(root)"
           fi
@@ -185,7 +150,7 @@ steps:
         # Initialize drift entries file
         echo "" > /workspace/drift_entries.ndjson
 
-        # Process each repository - FIXED: use $ for substitution variables
+        # Process each repository
         echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
           repo_name=$(echo "$$repo" | jq -r '.name')
           repo_type=$(echo "$$repo" | jq -r '.type')
@@ -254,7 +219,7 @@ steps:
           echo "✓ No drift detected across all repositories"
         fi
 
-  # Send notifications
+  # Send notifications (always runs, even if previous steps fail)
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'send-notification'
     entrypoint: 'sh'
@@ -264,6 +229,71 @@ steps:
         set -e
 
         apt-get update && apt-get install -y jq
+        
+        # Check if drift detection completed successfully
+        if [ ! -f /workspace/drift_detected.txt ]; then
+          # Pipeline failed before drift detection completed
+          WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
+          
+          FAILURE_PAYLOAD=$(jq -n \
+            --arg project "$$PROJECT_ID" \
+            --arg build_id "${BUILD_ID}" \
+            '{
+              "text": "❌ *Drift Detection Pipeline Failed*",
+              "cards": [
+                {
+                  "header": {
+                    "title": "❌ Pipeline Execution Error",
+                    "subtitle": "Drift detection could not complete",
+                    "imageUrl": "https://raw.githubusercontent.com/google/material-design-icons/master/png/alert/error/materialicons/24dp/2x/baseline_error_black_24dp.png"
+                  },
+                  "sections": [
+                    {
+                      "widgets": [
+                        {
+                          "textParagraph": {
+                            "text": "<font color=\"#EA4335\"><b>❌ Pipeline execution failed</b></font><br>The drift detection pipeline encountered an error and could not complete successfully. Please check the build logs for details."
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "widgets": [
+                        {
+                          "keyValue": {
+                            "topLabel": "Build ID",
+                            "content": $build_id
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "widgets": [
+                        {
+                          "buttons": [
+                            {
+                              "textButton": {
+                                "text": "📋 View Build Logs",
+                                "onClick": {
+                                  "openLink": {
+                                    "url": "https://console.cloud.google.com/cloud-build/builds;region=global/\($build_id)?project=\($project)"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }')
+          
+          echo "$$FAILURE_PAYLOAD" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
+          echo "Failure notification sent"
+          exit 0
+        fi
         
         DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
         WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
@@ -278,7 +308,6 @@ steps:
             tr '\n' ' ' | sed 's/<br> /<br>/g'
           )
           
-          # If DRIFT_DETAILS is empty, set a default message
           if [ -z "$$DRIFT_DETAILS" ]; then
             DRIFT_DETAILS="No detailed information available"
           fi
@@ -339,11 +368,10 @@ steps:
               ]
             }')
           
-          # Send notification
           echo "$$NOTIFICATION_PAYLOAD" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
           
         else
-          # No drift detected - send success message
+          # No drift detected
           SUCCESS_PAYLOAD=$(jq -n \
             --arg project "$$PROJECT_ID" \
             '{
@@ -392,6 +420,19 @@ steps:
         fi
         
         echo "Notification sent successfully"
+
+  # Failure notification handler - only runs if any previous step fails
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'send-failure-notification'
+    entrypoint: 'sh'
+    waitFor: ['-']  # Run independently, don't wait for previous steps
+    args:
+      - '-c'
+      - |
+        # This step only executes when the build fails
+        # Cloud Build will trigger this automatically with the status check below
+        echo "This step should not run on success"
+        exit 0
 
 substitutions:
   _TERRAFORM_VERSION: '1.5.7'
