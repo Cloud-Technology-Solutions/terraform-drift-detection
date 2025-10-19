@@ -145,7 +145,7 @@ echo "" > /workspace/drift_entries.ndjson
 echo "${_REPOSITORIES}" | jq -c '.[]' | while IFS= read -r repo; do
   repo_name=$(echo "$repo" | jq -r '.name')
   repo_type=$(echo "$repo" | jq -r '.type')
-  repo_path="/workspace/repos/$repo_name/test"
+  repo_path="/workspace/repos/$repo_name"
 
   echo ""
   echo "================================================"
