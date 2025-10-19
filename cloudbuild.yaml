@@ -247,11 +247,11 @@ steps:
 
         DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
         
-        if [ "$DRIFT_DETECTED" = "true" ]; then
+        if [ "$$DRIFT_DETECTED" = "true" ]; then
           DRIFT_REPORT=$(cat /workspace/drift_report.json)
-          DRIFT_COUNT=$(echo "$DRIFT_REPORT" | jq 'length')
+          DRIFT_COUNT=$(echo "$$DRIFT_REPORT" | jq 'length')
           DRIFT_DETAILS=$(
-            echo "$DRIFT_REPORT" | jq -r '.[] |
+            echo "$$DRIFT_REPORT" | jq -r '.[] |
               "• <b>Repo:</b> \(.repository)<br><b>Path:</b> \(.path)<br><b>Workspace:</b> \(.workspace)<br><b>Type:</b> \(.type)"' |
               tr '\n' ' ' | sed 's/<br> /<br>/g'
           )
