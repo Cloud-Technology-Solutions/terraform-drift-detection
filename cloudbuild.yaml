@@ -240,7 +240,7 @@ steps:
           jinja2 notifications/templates/failure.json.j2 \
             -D build_id="${BUILD_ID}" \
             -D project="${PROJECT_ID}" \
-            | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+            | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
           echo "Failure notification sent"
           exit 0
         fi
@@ -261,13 +261,13 @@ steps:
             -D build_id="${BUILD_ID}" \
             -D count="${DRIFT_COUNT}" \
             -D details="${DRIFT_DETAILS}" \
-            | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+            | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
 
         else
           jinja2 notifications/templates/success.json.j2 \
             -D build_id="${BUILD_ID}" \
             -D project="${PROJECT_ID}" \
-            | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+            | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
         fi
 
         echo "Notification sent successfully"
