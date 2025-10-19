@@ -1,0 +1,51 @@
+{
+  "text": "? *Drift Detection Pipeline Failed*",
+  "cards": [
+    {
+      "header": {
+        "title": "? Pipeline Execution Error",
+        "subtitle": "Drift detection could not complete",
+        "imageUrl": "https://raw.githubusercontent.com/google/material-design-icons/master/png/alert/error/materialicons/24dp/2x/baseline_error_black_24dp.png"
+      },
+      "sections": [
+        {
+          "widgets": [
+            {
+              "textParagraph": {
+                "text": "<font color=\"#EA4335\"><b>? Pipeline execution failed</b></font><br>The drift detection pipeline encountered an error and could not complete successfully. Please check the build logs for details."
+              }
+            }
+          ]
+        },
+        {
+          "widgets": [
+            {
+              "keyValue": {
+                "topLabel": "Build ID",
+                "content": "{{ build_id }}"
+              }
+            }
+          ]
+        },
+        {
+          "widgets": [
+            {
+              "buttons": [
+                {
+                  "textButton": {
+                    "text": "?? View Build Logs",
+                    "onClick": {
+                      "openLink": {
+                        "url": "https://console.cloud.google.com/cloud-build/builds;region=global/{{ build_id }}?project={{ project }}"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

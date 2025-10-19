@@ -231,211 +231,46 @@ steps:
       - |
         set -e
 
-        apt-get update && apt-get install -y jq
+        apt-get update && apt-get install -y jq python3-pip && \
+        python3 -m pip install jinja2-cli
         
-        # Check if drift detection completed successfully
+        WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
+
         if [ ! -f /workspace/drift_detected.txt ]; then
-          # Pipeline failed before drift detection completed
-          WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
-          
-          FAILURE_PAYLOAD=$(jq -n \
-            --arg project "$$PROJECT_ID" \
-            --arg build_id "${BUILD_ID}" \
-            '{
-              "text": "❌ *Drift Detection Pipeline Failed*",
-              "cards": [
-                {
-                  "header": {
-                    "title": "❌ Pipeline Execution Error",
-                    "subtitle": "Drift detection could not complete",
-                    "imageUrl": "https://raw.githubusercontent.com/google/material-design-icons/master/png/alert/error/materialicons/24dp/2x/baseline_error_black_24dp.png"
-                  },
-                  "sections": [
-                    {
-                      "widgets": [
-                        {
-                          "textParagraph": {
-                            "text": "<font color=\"#EA4335\"><b>❌ Pipeline execution failed</b></font><br>The drift detection pipeline encountered an error and could not complete successfully. Please check the build logs for details."
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "widgets": [
-                        {
-                          "keyValue": {
-                            "topLabel": "Build ID",
-                            "content": $build_id
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "widgets": [
-                        {
-                          "buttons": [
-                            {
-                              "textButton": {
-                                "text": "📋 View Build Logs",
-                                "onClick": {
-                                  "openLink": {
-                                    "url": "https://console.cloud.google.com/cloud-build/builds;region=global/\($build_id)?project=\($project)"
-                                  }
-                                }
-                              }
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }')
-          
-          echo "$$FAILURE_PAYLOAD" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
+          jinja2 notifications/templates/failure.json.j2 \
+            -D build_id="${BUILD_ID}" \
+            -D project="${PROJECT_ID}" \
+            | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
           echo "Failure notification sent"
           exit 0
         fi
-        
-        DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
-        WEBHOOK_URL=$(gcloud secrets versions access latest --secret=${_CHAT_WEBHOOK_SECRET})
-        
-        if [ "$$DRIFT_DETECTED" = "true" ]; then
-          # Read drift report
-          DRIFT_REPORT=$(cat /workspace/drift_report.json)
-          DRIFT_COUNT=$(echo "$$DRIFT_REPORT" | /usr/bin/jq 'length')
-          DRIFT_DETAILS=$(
-            echo "$$DRIFT_REPORT" | /usr/bin/jq -r '.[] | 
-              "• <b>Repo:</b> \(.repository)<br>  <b>Path:</b> \(.path)<br>  <b>Workspace:</b> \(.workspace)<br>  <b>Type:</b> \(.type)"' | 
-            tr '\n' ' ' | sed 's/<br> /<br>/g'
-          )
-          
-          if [ -z "$$DRIFT_DETAILS" ]; then
-            DRIFT_DETAILS="No detailed information available"
-          fi
-          
-          # Create notification payload
-          NOTIFICATION_PAYLOAD=$(jq -n \
-            --arg project "$$PROJECT_ID" \
-            --arg count "$$DRIFT_COUNT" \
-            --arg details "$$DRIFT_DETAILS" \
-            '{
-              "text": "⚠️ *Terraform Drift Detected*",
-              "cards": [
-                {
-                  "header": {
-                    "title": "🔍 Drift Detection Report",
-                    "subtitle": "Found \($count) location(s) with configuration drift",
-                    "imageUrl": "https://raw.githubusercontent.com/google/material-design-icons/master/png/alert/warning_amber/materialicons/24dp/2x/baseline_warning_amber_black_24dp.png"
-                  },
-                  "sections": [
-                    {
-                      "widgets": [
-                        {
-                          "textParagraph": {
-                            "text": "<font color=\"#FF0000\"><b>⚠️ Configuration drift detected!</b></font><br>The following locations have differences between code and infrastructure state:"
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "widgets": [
-                        {
-                          "textParagraph": {
-                            "text": $details
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "widgets": [
-                        {
-                          "buttons": [
-                            {
-                              "textButton": {
-                                "text": "📋 View Build Logs",
-                                "onClick": {
-                                  "openLink": {
-                                    "url": "https://console.cloud.google.com/cloud-build/builds;region=global/${BUILD_ID}?project=\($project)"
-                                  }
-                                }
-                              }
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }')
-          
-          echo "$$NOTIFICATION_PAYLOAD" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
-          
-        else
-          # No drift detected
-          SUCCESS_PAYLOAD=$(jq -n \
-            --arg project "$$PROJECT_ID" \
-            '{
-              "text": "✅ *No Drift Detected*",
-              "cards": [
-                {
-                  "header": {
-                    "title": "✅ Infrastructure In Sync",
-                    "subtitle": "All repositories match their infrastructure state",
-                    "imageUrl": "https://raw.githubusercontent.com/google/material-design-icons/master/png/action/check_circle/materialicons/24dp/2x/baseline_check_circle_black_24dp.png"
-                  },
-                  "sections": [
-                    {
-                      "widgets": [
-                        {
-                          "textParagraph": {
-                            "text": "<font color=\"#34A853\"><b>✓ No configuration drift detected</b></font><br>All monitored repositories are in sync with their infrastructure state."
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "widgets": [
-                        {
-                          "buttons": [
-                            {
-                              "textButton": {
-                                "text": "📋 View Build Logs",
-                                "onClick": {
-                                  "openLink": {
-                                    "url": "https://console.cloud.google.com/cloud-build/builds;region=global/${BUILD_ID}?project=\($project)"
-                                  }
-                                }
-                              }
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }')
-          
-          echo "$$SUCCESS_PAYLOAD" | curl -sS -X POST -H 'Content-Type: application/json' "$$WEBHOOK_URL" -d @-
-        fi
-        
-        echo "Notification sent successfully"
 
-  # Failure notification handler - only runs if any previous step fails
-  - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'send-failure-notification'
-    entrypoint: 'sh'
-    waitFor: ['-']  # Run independently, don't wait for previous steps
-    args:
-      - '-c'
-      - |
-        # This step only executes when the build fails
-        # Cloud Build will trigger this automatically with the status check below
-        echo "This step should not run on success"
-        exit 0
+        DRIFT_DETECTED=$(cat /workspace/drift_detected.txt)
+        
+        if [ "$DRIFT_DETECTED" = "true" ]; then
+          DRIFT_REPORT=$(cat /workspace/drift_report.json)
+          DRIFT_COUNT=$(echo "$DRIFT_REPORT" | jq 'length')
+          DRIFT_DETAILS=$(
+            echo "$DRIFT_REPORT" | jq -r '.[] |
+              "• <b>Repo:</b> \(.repository)<br><b>Path:</b> \(.path)<br><b>Workspace:</b> \(.workspace)<br><b>Type:</b> \(.type)"' |
+              tr '\n' ' ' | sed 's/<br> /<br>/g'
+          )
+
+          jinja2 notifications/templates/drift.json.j2 \
+            -D project="${PROJECT_ID}" \
+            -D build_id="${BUILD_ID}" \
+            -D count="${DRIFT_COUNT}" \
+            -D details="${DRIFT_DETAILS}" \
+            | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+
+        else
+          jinja2 notifications/templates/success.json.j2 \
+            -D build_id="${BUILD_ID}" \
+            -D project="${PROJECT_ID}" \
+            | curl -sS -X POST -H 'Content-Type: application/json' "$WEBHOOK_URL" -d @-
+        fi
+
+        echo "Notification sent successfully"
 
 substitutions:
   _TERRAFORM_VERSION: '1.5.7'
