@@ -14,7 +14,7 @@ steps:
   # Terraform drift detection
   - name: 'alpine:latest'
     id: 'drift-detection'
-    entrypoint: 'bash'
+    entrypoint: 'sh'
     env:
       - '_TERRAFORM_VERSION=${_TERRAFORM_VERSION}'
       - '_TERRAGRUNT_VERSION=${_TERRAGRUNT_VERSION}'
