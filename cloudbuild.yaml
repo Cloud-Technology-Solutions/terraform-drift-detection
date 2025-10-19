@@ -6,7 +6,7 @@ steps:
     args:
       - '-c'
       - |
-        apt-get update && apt-get install -y jq ssh-keyscan
+        apt-get update && apt-get install -y jq
 
   # Setup SSH configuration
   - name: 'gcr.io/cloud-builders/gcloud'
