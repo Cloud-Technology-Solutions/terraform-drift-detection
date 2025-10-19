@@ -13,228 +13,90 @@ wget -qO /usr/local/bin/terragrunt \
   https://github.com/gruntwork-io/terragrunt/releases/download/v${_TERRAGRUNT_VERSION}/terragrunt_linux_amd64
 chmod +x /usr/local/bin/terragrunt
 
-# Initialize tracking files
-echo "false" > /workspace/drift_detected.txt
-echo "false" > /workspace/failure_detected.txt
-echo "[]" > /workspace/drift_report.json
+# Initialize state
+DRIFT_DETECTED=false
+FAILURE_DETECTED=false
+DRIFT_ENTRIES="/tmp/drift_entries.ndjson"
+> "$DRIFT_ENTRIES"
 
-# Function to mark failure
-mark_failure() {
-  echo "true" > /workspace/failure_detected.txt
+# Log drift entry
+log_drift() {
+  jq -n \
+    --arg repo "$1" \
+    --arg path "$2" \
+    --arg workspace "$3" \
+    --arg type "$4" \
+    '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
+    >> "$DRIFT_ENTRIES"
+  DRIFT_DETECTED=true
 }
 
-# Function to find all directories with main.tf
-find_terraform_dirs() {
-  local base_dir="$1"
-  find "$base_dir" -type f -name "main.tf" -exec dirname {} \; | sort -u
-}
-
-# Function to find all directories with terragrunt.hcl
-find_terragrunt_dirs() {
-  local base_dir="$1"
-  find "$base_dir" -type f -name "terragrunt.hcl" -exec dirname {} \; | sort -u
-}
-
-# Function to get all workspaces
-get_workspaces() {
-  local dir="$1"
+# Run terraform plan with drift detection
+check_terraform_drift() {
+  local dir="$1" repo="$2" workspace="$3"
+  local rel_path="${dir#/workspace/repos/$repo/}"
+  
   cd "$dir"
-  if ! terraform init -input=false >> /tmp/tf_init.log 2>&1; then
-    echo "  ⚠️  Failed to initialize Terraform in $dir"
-    mark_failure
-    return 1
+  terraform init -input=false > /dev/null 2>&1 || return 1
+  
+  [ "$workspace" != "default" ] && terraform workspace select "$workspace" > /dev/null 2>&1
+  
+  if ! terraform plan -detailed-exitcode -no-color > /dev/null 2>&1; then
+    [ $? -eq 2 ] && log_drift "$repo" "${rel_path:-(root)}" "$workspace" "terraform"
   fi
-  terraform workspace list 2>/dev/null | sed 's/^[* ]*//' | awk 'NF'
 }
 
-# Function to run terraform plan and capture drift
-run_terraform_plan() {
-  local dir="$1"
-  local repo_name="$2"
-  local workspace="$3"
-  local relative_path="${dir#/workspace/repos/$repo_name}"
-  relative_path="${relative_path#/}"
-  if [ -z "$relative_path" ]; then
-    relative_path="(root)"
-  fi
-
-  echo "Running Terraform plan in: $dir (workspace: $workspace)"
+# Run terragrunt plan with drift detection
+check_terragrunt_drift() {
+  local dir="$1" repo="$2"
+  local rel_path="${dir#/workspace/repos/$repo/}"
+  
   cd "$dir"
-
-  # Ensure init before plan
-  if ! terraform init -input=false -upgrade=false -no-color >> /tmp/tf_init_${repo_name}.log 2>&1; then
-    echo "  ⚠️  Failed to initialize Terraform in $dir"
-    mark_failure
-    return 1
-  fi
-
-  # Select workspace if not default
-  if [ "$workspace" != "default" ]; then
-    terraform workspace select "$workspace" > /dev/null 2>&1 || {
-      echo "  ⚠️  Failed to select workspace: $workspace"
-      mark_failure
-      return 1
-    }
-  fi
-
-  # Unique plan file per run
-  plan_file="/tmp/tfplan_${repo_name}_${workspace}_$$"
-
-  if terraform plan -detailed-exitcode -no-color -out="$plan_file" > /tmp/tf_plan_${repo_name}_${workspace}.log 2>&1; then
-    echo "  ✓ No drift detected"
-    rm -f "$plan_file"
-    return 0
-  else
-    exit_code=$?
-    if [ $exit_code -eq 2 ]; then
-      echo "  ⚠️  DRIFT DETECTED!"
-      echo "true" > /workspace/drift_detected.txt
-
-      jq -n \
-        --arg repo "$repo_name" \
-        --arg path "$relative_path" \
-        --arg workspace "$workspace" \
-        --arg type "terraform" \
-        '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
-        >> /workspace/drift_entries.ndjson
-      rm -f "$plan_file"
-      return 2
-    else
-      echo "  ⚠️  Plan failed with exit code: $exit_code"
-      mark_failure
-      rm -f "$plan_file"
-      return 1
-    fi
+  terragrunt init -input=false > /dev/null 2>&1 || return 1
+  
+  if ! terragrunt plan -detailed-exitcode -no-color > /dev/null 2>&1; then
+    [ $? -eq 2 ] && log_drift "$repo" "${rel_path:-(root)}" "default" "terragrunt"
   fi
 }
 
-# Function to run terragrunt plan and capture drift
-run_terragrunt_plan() {
-  local dir="$1"
-  local repo_name="$2"
-  local relative_path="${dir#/workspace/repos/$repo_name}"
-  relative_path="${relative_path#/}"
-  if [ -z "$relative_path" ]; then
-    relative_path="(root)"
-  fi
-
-  echo "Running Terragrunt plan in: $dir"
-  cd "$dir"
-
-  # Ensure init before plan
-  if ! terragrunt init -input=false -no-color >> /tmp/tg_init_${repo_name}.log 2>&1; then
-    echo "  ⚠️  Failed to initialize Terragrunt in $dir"
-    mark_failure
-    return 1
-  fi
-
-  plan_file="/tmp/tgplan_${repo_name}_$$"
-
-  # Run terragrunt plan
-  if terragrunt plan -detailed-exitcode -no-color -out="$plan_file" > /tmp/tg_plan_${repo_name}.log 2>&1; then
-    echo "  ✓ No drift detected"
-    rm -f "$plan_file"
-    return 0
-  else
-    exit_code=$?
-    if [ $exit_code -eq 2 ]; then
-      echo "  ⚠️  DRIFT DETECTED!"
-      echo "true" > /workspace/drift_detected.txt
-
-      jq -n \
-        --arg repo "$repo_name" \
-        --arg path "$relative_path" \
-        --arg workspace "default" \
-        --arg type "terragrunt" \
-        '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
-        >> /workspace/drift_entries.ndjson
-
-      rm -f "$plan_file"
-      return 2
-    else
-      echo "  ⚠️  Plan failed with exit code: $exit_code"
-      mark_failure
-      rm -f "$plan_file"
-      return 1
-    fi
-  fi
-}
-
-# Initialize drift entries file
-echo "" > /workspace/drift_entries.ndjson
-
-# Process each repository
-echo "${_REPOSITORIES}" | jq -c '.[]' | while IFS= read -r repo; do
+# Process repositories
+echo "${_REPOSITORIES}" | jq -c '.[]' | while read -r repo; do
   repo_name=$(echo "$repo" | jq -r '.name')
   repo_type=$(echo "$repo" | jq -r '.type')
   repo_path="/workspace/repos/$repo_name"
-
-  echo ""
-  echo "================================================"
-  echo "Processing repository: $repo_name (type: $repo_type)"
-  echo "================================================"
-
-  if [ ! -d "$repo_path" ]; then
-    echo "⚠️  Repository path not found: $repo_path"
-    mark_failure
-    continue
-  fi
-
+  
+  echo "Checking $repo_name ($repo_type)..."
+  
+  [ ! -d "$repo_path" ] && { echo "Path not found: $repo_path"; FAILURE_DETECTED=true; continue; }
+  
   if [ "$repo_type" = "terraform" ]; then
-    tf_dirs=$(find_terraform_dirs "$repo_path")
-
-    if [ -z "$tf_dirs" ]; then
-      echo "No main.tf files found in $repo_name"
-      continue
-    fi
-
-    echo "$tf_dirs" | while IFS= read -r tf_dir; do
-      workspaces=$(get_workspaces "$tf_dir")
-      echo "$workspaces" | while IFS= read -r workspace; do
-        run_terraform_plan "$tf_dir" "$repo_name" "$workspace" || true
+    find "$repo_path" -name "main.tf" -exec dirname {} \; | sort -u | while read -r tf_dir; do
+      cd "$tf_dir"
+      terraform init -input=false > /dev/null 2>&1 || continue
+      terraform workspace list 2>/dev/null | sed 's/^[* ]*//' | awk 'NF' | while read -r ws; do
+        check_terraform_drift "$tf_dir" "$repo_name" "$ws" || FAILURE_DETECTED=true
       done
     done
-
   elif [ "$repo_type" = "terragrunt" ]; then
-    tg_dirs=$(find_terragrunt_dirs "$repo_path")
-
-    if [ -z "$tg_dirs" ]; then
-      echo "No terragrunt.hcl files found in $repo_name"
-      continue
-    fi
-
-    echo "$tg_dirs" | while IFS= read -r tg_dir; do
-      run_terragrunt_plan "$tg_dir" "$repo_name" || true
+    find "$repo_path" -name "terragrunt.hcl" -exec dirname {} \; | sort -u | while read -r tg_dir; do
+      check_terragrunt_drift "$tg_dir" "$repo_name" || FAILURE_DETECTED=true
     done
-  else
-    echo "⚠️  Unknown repository type: $repo_type"
-    mark_failure
   fi
 done
 
-# Consolidate drift entries into JSON array
-if [ -s /workspace/drift_entries.ndjson ]; then
-  jq -s '.' /workspace/drift_entries.ndjson > /workspace/drift_report.json
+# Generate report
+jq -s '.' "$DRIFT_ENTRIES" > /workspace/drift_report.json
+
+# Summary
+echo ""
+echo "=== Drift Detection Summary ==="
+if [ -s "$DRIFT_ENTRIES" ]; then
+  echo "⚠️  DRIFT DETECTED:"
+  jq -r '.[] | "  - \(.repository)/\(.path) [\(.workspace)]"' /workspace/drift_report.json
 else
-  echo "[]" > /workspace/drift_report.json
+  echo "✓ No drift detected"
 fi
 
-echo ""
-echo "================================================"
-echo "Drift Detection Summary"
-echo "================================================"
-drift_detected=$(cat /workspace/drift_detected.txt)
-if [ "$drift_detected" = "true" ]; then
-  echo "⚠️  DRIFT DETECTED in one or more repositories"
-  jq -r '.[] | "  - \(.repository)/\(.path) (workspace: \(.workspace), type: \(.type))"' /workspace/drift_report.json
-else
-  echo "✓ No drift detected across all repositories"
-fi
-
-echo ""
-failure_detected=$(cat /workspace/failure_detected.txt)
-if [ "$failure_detected" = "true" ]; then
-  echo "⚠️  FAILURES DETECTED during execution"
-else
-  echo "✓ All operations completed successfully"
-fi
+# Save state for external consumption
+echo "$DRIFT_DETECTED" > /workspace/drift_detected.txt
+echo "$FAILURE_DETECTED" > /workspace/failure_detected.txt
