@@ -61,6 +61,13 @@ run_terraform_plan() {
   echo "Running Terraform plan in: $dir (workspace: $workspace)"
   cd "$dir"
 
+  # Ensure init before plan
+  if ! terraform init -input=false -upgrade=false -no-color >> /tmp/tf_init_${repo_name}.log 2>&1; then
+    echo "  ⚠️  Failed to initialize Terraform in $dir"
+    mark_failure
+    return 1
+  fi
+
   # Select workspace if not default
   if [ "$workspace" != "default" ]; then
     terraform workspace select "$workspace" > /dev/null 2>&1 || {
@@ -70,9 +77,12 @@ run_terraform_plan() {
     }
   fi
 
-  # Run plan and capture output
-  if terraform plan -detailed-exitcode -no-color -out=/tmp/tfplan > /tmp/tf_plan.log 2>&1; then
+  # Unique plan file per run
+  plan_file="/tmp/tfplan_${repo_name}_${workspace}_$$"
+
+  if terraform plan -detailed-exitcode -no-color -out="$plan_file" > /tmp/tf_plan_${repo_name}_${workspace}.log 2>&1; then
     echo "  ✓ No drift detected"
+    rm -f "$plan_file"
     return 0
   else
     exit_code=$?
@@ -80,7 +90,6 @@ run_terraform_plan() {
       echo "  ⚠️  DRIFT DETECTED!"
       echo "true" > /workspace/drift_detected.txt
 
-      # Create simplified drift entry
       jq -n \
         --arg repo "$repo_name" \
         --arg path "$relative_path" \
@@ -88,11 +97,12 @@ run_terraform_plan() {
         --arg type "terraform" \
         '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
         >> /workspace/drift_entries.ndjson
-
+      rm -f "$plan_file"
       return 2
     else
       echo "  ⚠️  Plan failed with exit code: $exit_code"
       mark_failure
+      rm -f "$plan_file"
       return 1
     fi
   fi
@@ -111,9 +121,19 @@ run_terragrunt_plan() {
   echo "Running Terragrunt plan in: $dir"
   cd "$dir"
 
+  # Ensure init before plan
+  if ! terragrunt init -input=false -no-color >> /tmp/tg_init_${repo_name}.log 2>&1; then
+    echo "  ⚠️  Failed to initialize Terragrunt in $dir"
+    mark_failure
+    return 1
+  fi
+
+  plan_file="/tmp/tgplan_${repo_name}_$$"
+
   # Run terragrunt plan
-  if terragrunt plan -detailed-exitcode -no-color -out=/tmp/tgplan > /tmp/tg_plan.log 2>&1; then
+  if terragrunt plan -detailed-exitcode -no-color -out="$plan_file" > /tmp/tg_plan_${repo_name}.log 2>&1; then
     echo "  ✓ No drift detected"
+    rm -f "$plan_file"
     return 0
   else
     exit_code=$?
@@ -129,10 +149,12 @@ run_terragrunt_plan() {
         '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
         >> /workspace/drift_entries.ndjson
 
+      rm -f "$plan_file"
       return 2
     else
       echo "  ⚠️  Plan failed with exit code: $exit_code"
       mark_failure
+      rm -f "$plan_file"
       return 1
     fi
   fi
