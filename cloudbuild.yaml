@@ -1,39 +1,46 @@
 steps:
-  # Clone repositories first
+  # Install dependencies first
   - name: 'gcr.io/cloud-builders/git'
-    id: 'clone-repositories'
+    id: 'install-dependencies'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        apt-get update && apt-get install -y jq ssh-keyscan
+
+  # Setup SSH configuration
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'setup-ssh'
     entrypoint: 'sh'
     args:
       - '-c'
       - |
         set -e
-        
-        # Install jq
-        apt-get update && apt-get install -y jq
-        
-        # Setup SSH
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
-        
-        # Access SSH key using gcloud - FIXED: use $ not $$ for substitution variables
         gcloud secrets versions access latest --secret=${_SSH_KEY_SECRET} > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         
-        # Add known hosts for major git providers
-        ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
-        ssh-keyscan -H gitlab.com >> ~/.ssh/known_hosts 2>/dev/null
-        ssh-keyscan -H bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null
+        # Add known hosts
+        ssh-keyscan -H github.com gitlab.com bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null
 
-        export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no"
-        
-        # Clone all repositories - FIXED: use $ for substitution, $$ for local vars
-        echo '${_REPOSITORIES}' | jq -c '.[]' | while IFS= read -r repo; do
-          name=$(echo "$$repo" | jq -r '.name')
-          url=$(echo "$$repo" | jq -r '.url')
-          branch=$(echo "$$repo" | jq -r '.branch')
+  # Clone repositories
+  - name: 'gcr.io/cloud-builders/git'
+    id: 'clone-repositories'
+    entrypoint: 'bash'
+    env:
+      - 'GIT_SSH_COMMAND=ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no'
+    args:
+      - '-c'
+      - |
+        set -e
+        echo '${_REPOSITORIES}' | jq -c '.[]' | while read -r repo; do
+          name=$(echo "$repo" | jq -r '.name')
+          url=$(echo "$repo" | jq -r '.url')
+          branch=$(echo "$repo" | jq -r '.branch')
           
-          echo "Cloning repository: $$name (branch: $$branch)"
-          git clone --branch "$$branch" --depth 1 "$$url" "/workspace/repos/$$name"
+          echo "Cloning repository: $name (branch: $branch)"
+          git clone --branch "$branch" --depth 1 "$url" "/workspace/repos/$name"
         done
 
   # Terraform drift detection
