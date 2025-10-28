@@ -1,3 +1,6 @@
 [submodule "terraform-drift-detection-child"]
 	path = terraform-drift-detection-child
 	url = git@github.com:Cloud-Technology-Solutions/terraform-drift-detection-child.git
+[submodule "terraform-drift-detection-child-terragrunt"]
+	path = terraform-drift-detection-child-terragrunt
+	url = git@github.com:Cloud-Technology-Solutions/terraform-drift-detection-child-terragrunt.git

@@ -135,7 +135,7 @@ resource "google_cloudbuild_trigger" "drift_detection" {
 
   source_to_build {
     uri       = "https://github.com/Cloud-Technology-Solutions/terraform-drift-detection"
-    ref       = "refs/heads/master"
+    ref       = "refs/heads/fb/developing-poc"
     repo_type = "GITHUB"
   }
 
@@ -179,5 +179,12 @@ resource "google_cloud_scheduler_job" "drift_detection_schedule" {
 resource "google_project_iam_member" "drift_detector_builds_editor" {
   project = var.project_id
   role    = "roles/cloudbuild.builds.editor"
+  member  = "serviceAccount:${google_service_account.drift_detector.email}"
+}
+
+# Grant Cloud Build service account permission to update terraform state in GCS
+resource "google_project_iam_member" "drift_detector_storage_admin" {
+  project = var.project_id
+  role    = "roles/storage.objectAdmin"
   member  = "serviceAccount:${google_service_account.drift_detector.email}"
 }

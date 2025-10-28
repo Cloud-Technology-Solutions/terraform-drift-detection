@@ -1,0 +1,50 @@
+{
+  "text": "⚠️ *Terraform Drift Detected*",
+  "cards": [
+    {
+      "header": {
+        "title": "🌍 Drift Detection Report",
+        "subtitle": "Found {{ count }} location(s) with configuration drift",
+        "imageUrl": "https://raw.githubusercontent.com/google/material-design-icons/master/png/alert/warning_amber/materialicons/24dp/2x/baseline_warning_amber_black_24dp.png"
+      },
+      "sections": [
+        {
+          "widgets": [
+            {
+              "textParagraph": {
+                "text": "<font color=\"#FF0000\"><b>🚨 Configuration drift detected!</b></font><br>The following locations have differences between code and infrastructure state:"
+              }
+            }
+          ]
+        },
+        {
+          "widgets": [
+            {
+              "textParagraph": {
+                "text": "{{ details | safe }}"
+              }
+            }
+          ]
+        },
+        {
+          "widgets": [
+            {
+              "buttons": [
+                {
+                  "textButton": {
+                    "text": "🧱 View Build Logs",
+                    "onClick": {
+                      "openLink": {
+                        "url": "https://console.cloud.google.com/cloud-build/builds;region=global/{{ build_id }}?project={{ project }}"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
