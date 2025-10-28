@@ -52,13 +52,11 @@ check_terragrunt_drift() {
   local rel_path="${dir#/workspace/repos/$repo/}"
   
   cd "$dir"
-  terragrunt run init --non-interactive > /dev/null 2>&1 || return 1
+  terragrunt run init --non-interactive || return 1
 
-  if ! terragrunt plan -detailed-exitcode -no-color -lock=false > /dev/null 2>&1; then
+  if ! terragrunt plan -detailed-exitcode -no-color -lock=false; then
     [ $? -eq 2 ] log_drift "$repo" "${rel_path:-(root)}" "default" "terragrunt"
   fi
-  
-  return 0
 }
 
 # Process repositories
