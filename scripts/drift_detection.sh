@@ -54,9 +54,14 @@ check_terragrunt_drift() {
   cd "$dir"
   terragrunt init -input=false > /dev/null 2>&1 || return 1
   
-  if ! terragrunt plan -detailed-exitcode -no-color -lock=false > /dev/null 2>&1; then
-    [ $? -eq 2 ] && log_drift "$repo" "${rel_path:-(root)}" "default" "terragrunt"
+  terragrunt plan -detailed-exitcode -no-color -lock=false > /dev/null 2>&1
+  local exit_code=$?
+  
+  if [ $exit_code -eq 2 ]; then
+    log_drift "$repo" "${rel_path:-(root)}" "default" "terragrunt"
   fi
+  
+  return 0
 }
 
 # Process repositories
