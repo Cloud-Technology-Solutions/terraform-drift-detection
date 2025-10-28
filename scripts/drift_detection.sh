@@ -2,7 +2,7 @@
 set -e
 
 # Install dependencies
-apk add --no-cache unzip wget jq git
+apk add --no-cache unzip wget jq git openssh
 
 # Install Terraform
 wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
