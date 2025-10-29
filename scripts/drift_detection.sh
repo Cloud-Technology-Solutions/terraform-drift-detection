@@ -2,7 +2,7 @@
 set -e
 
 # Install dependencies
-apk add --no-cache unzip wget jq git openssh
+apk add --no-cache unzip wget jq git openssh-client
   
 # Add known hosts (required to fetch referenced terragrunt modules)
 for host in github.com gitlab.com bitbucket.org; do
