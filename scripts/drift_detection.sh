@@ -3,6 +3,11 @@ set -e
 
 # Install dependencies
 apk add --no-cache unzip wget jq git openssh
+  
+# Add known hosts (required to fetch referenced terragrunt modules)
+for host in github.com gitlab.com bitbucket.org; do
+  ssh-keyscan -H "$host" >> "${SSH_DIR}/known_hosts" 2>/dev/null || true
+done
 
 # Install Terraform
 wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
