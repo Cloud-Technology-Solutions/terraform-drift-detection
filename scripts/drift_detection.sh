@@ -120,7 +120,7 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while read -r repo; do
       done
     done
   elif [ "$repo_type" = "terragrunt" ]; then
-    find "$repo_path" -name "terragrunt.hcl" -exec dirname {} \; | sort -u | while read -r tg_dir; do
+    find "$repo_path/" -name "terragrunt.hcl" -exec dirname {} \; | sort -u | while read -r tg_dir; do
       if echo "$tg_dir" | grep -q "\.terragrunt-cache"; then
         continue
       fi
