@@ -74,28 +74,35 @@ check_terraform_drift() {
 check_terragrunt_drift() {
   local dir="$1" repo="$2"
   local rel_path="${dir#/workspace/repos/$repo/}"
-  
-  cd "$dir"
 
-  if ! terragrunt init -input=false > /dev/null 2>&1; then
-    echo "Failed to initialize Terragrunt in $dir"
+  cd "$dir" || {
+    echo "Failed to enter directory: $dir"
+    echo "true" > /tmp/failure_detected.state
+    return 1
+  }
+
+  # Initialize Terragrunt
+  if ! terragrunt init -input=false >/dev/null 2>&1; then
+    echo "Terragrunt init failed in $dir"
     echo "true" > /tmp/failure_detected.state
     return 1
   fi
 
-  if terragrunt plan -detailed-exitcode -no-color -lock=false --non-interactive; then
-    return 0
-  else
-    local exit_code=$?
-    if [ $exit_code -eq 2 ]; then
-      log_drift "$repo" "${rel_path:-(root)}" "-" "terragrunt"
-      return 0
-    else
-      echo "Terragrunt plan failed with exit code $exit_code in $dir"
-      echo "true" > /tmp/failure_detected.state
-      return 1
-    fi
-  fi
+  # Run plan and capture exit code
+  terragrunt plan -detailed-exitcode -no-color -lock=false --non-interactive >/dev/null 2>&1
+  local exit_code=$?
+
+  case $exit_code in
+    0)  # No drift
+        return 0 ;;
+    2)  # Drift detected
+        log_drift "$repo" "${rel_path:-(root)}" "-" "terragrunt"
+        return 0 ;;
+    *)  # Error
+        echo "Terragrunt plan failed with exit code $exit_code in $dir"
+        echo "true" > /tmp/failure_detected.state
+        return 1 ;;
+  esac
 }
 
 # Process repositories
@@ -120,7 +127,7 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while read -r repo; do
       done
     done
   elif [ "$repo_type" = "terragrunt" ]; then
-    find "$repo_path/" -name "terragrunt.hcl" -exec dirname {} \; | sort -u | while read -r tg_dir; do
+    find "$repo_path" -name "terragrunt.hcl" -exec dirname {} \; | sort -u | while read -r tg_dir; do
       if echo "$tg_dir" | grep -q "\.terragrunt-cache"; then
         continue
       fi
