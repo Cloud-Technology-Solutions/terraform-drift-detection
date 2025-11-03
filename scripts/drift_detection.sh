@@ -37,6 +37,7 @@ log_drift() {
     --arg type "$4" \
     '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
     >> "$DRIFT_ENTRIES"
+  echo -e "\n" >> "$DRIFT_ENTRIES"
   echo "true" > /tmp/drift_detected.state
 }
 
