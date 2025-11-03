@@ -37,7 +37,6 @@ log_drift() {
     --arg type "$4" \
     '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
     >> "$DRIFT_ENTRIES"
-  echo -e "\n\n" >> "$DRIFT_ENTRIES"
   echo "true" > /tmp/drift_detected.state
 }
 
@@ -147,7 +146,7 @@ echo "=== Drift Detection Summary ==="
 if [ "$DRIFT_DETECTED" = "true" ]; then
   echo "⚠️  DRIFT DETECTED:"
   if [ -s "/workspace/drift_report.json" ]; then
-    jq -r '.[] | "  - \(.repository)/\(.path) [\(.workspace)] (\(.type))"' /workspace/drift_report.json
+    jq -r '.[] | "- **Repo**: \(.repository)  \n- **Path**: \(.path)  \n- **Workspace**: \(.workspace)  \n- **Type**: \(.type)\n"' /workspace/drift_report.json > /workspace/drift_report.md
   fi
 else
   echo "✓ No drift detected"
