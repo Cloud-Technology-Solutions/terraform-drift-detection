@@ -122,14 +122,20 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while read -r repo; do
 done
 
 # Generate report
-jq -s '.' "$DRIFT_ENTRIES" > /workspace/drift_report.json
+if [ -s "$DRIFT_ENTRIES" ]; then
+  jq -s '.' "$DRIFT_ENTRIES" > /workspace/drift_report.json
+else
+  echo "[]" > /workspace/drift_report.json
+fi
 
 # Summary
 echo ""
 echo "=== Drift Detection Summary ==="
-if [ -s "$DRIFT_ENTRIES" ]; then
+if [ "$DRIFT_DETECTED" = "true" ]; then
   echo "⚠️  DRIFT DETECTED:"
-  jq -r '.[] | "  - \(.repository)/\(.path) [\(.workspace)]"' /workspace/drift_report.json
+  if [ -s "/workspace/drift_report.json" ]; then
+    jq -r '.[] | "  - \(.repository)/\(.path) [\(.workspace)] (\(.type))"' /workspace/drift_report.json
+  fi
 else
   echo "✓ No drift detected"
 fi
