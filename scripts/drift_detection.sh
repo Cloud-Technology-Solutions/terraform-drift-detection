@@ -146,7 +146,7 @@ echo "=== Drift Detection Summary ==="
 if [ "$DRIFT_DETECTED" = "true" ]; then
   echo "⚠️  DRIFT DETECTED:"
   if [ -s "/workspace/drift_report.json" ]; then
-    jq -r '.[] | "  - \(.repository)/\(.path) [\(.workspace)] (\(.type))\n"' /workspace/drift_report.json
+    jq -r '.[] | "  - \(.repository)/\(.path) [\(.workspace)] (\(.type))"' /workspace/drift_report.json
   fi
 else
   echo "✓ No drift detected"
