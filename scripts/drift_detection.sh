@@ -24,6 +24,10 @@ FAILURE_DETECTED=false
 DRIFT_ENTRIES="/tmp/drift_entries.ndjson"
 > "$DRIFT_ENTRIES"
 
+# Create temp files to track state across subshells
+echo "false" > /tmp/drift_detected.state
+echo "false" > /tmp/failure_detected.state
+
 # Log drift entry
 log_drift() {
   jq -n \
@@ -33,7 +37,7 @@ log_drift() {
     --arg type "$4" \
     '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
     >> "$DRIFT_ENTRIES"
-  DRIFT_DETECTED=true
+  echo "true" > /tmp/drift_detected.state
 }
 
 # Run terraform plan with drift detection
@@ -46,6 +50,7 @@ check_terraform_drift() {
   if [ "$workspace" != "default" ]; then
     if ! terraform workspace select "$workspace" > /dev/null 2>&1; then
       echo "Failed to select workspace $workspace in $dir"
+      echo "true" > /tmp/failure_detected.state
       return 1
     fi
   fi
@@ -59,6 +64,7 @@ check_terraform_drift() {
       return 0
     else
       echo "Terraform plan failed with exit code $exit_code in $dir"
+      echo "true" > /tmp/failure_detected.state
       return 1
     fi
   fi
@@ -73,6 +79,7 @@ check_terragrunt_drift() {
 
   if ! terragrunt run -- init > /dev/null 2>&1; then
     echo "Failed to initialize Terragrunt in $dir"
+    echo "true" > /tmp/failure_detected.state
     return 1
   fi
 
@@ -85,6 +92,7 @@ check_terragrunt_drift() {
       return 0
     else
       echo "Terragrunt plan failed with exit code $exit_code in $dir"
+      echo "true" > /tmp/failure_detected.state
       return 1
     fi
   fi
@@ -98,17 +106,17 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while read -r repo; do
   
   echo "Checking $repo_name ($repo_type)..."
   
-  [ ! -d "$repo_path" ] && { echo "Path not found: $repo_path"; FAILURE_DETECTED=true; continue; }
+  [ ! -d "$repo_path" ] && { echo "Path not found: $repo_path"; echo "true" > /tmp/failure_detected.state; continue; }
   
   if [ "$repo_type" = "terraform" ]; then
     find "$repo_path" -name "main.tf" -exec dirname {} \; | sort -u | while read -r tf_dir; do
       cd "$tf_dir"
       if ! terraform init -input=false > /dev/null 2>&1; then
-        FAILURE_DETECTED=true
+        echo "true" > /tmp/failure_detected.state
         continue
       fi
       terraform workspace list 2>/dev/null | sed 's/^[* ]*//' | awk 'NF' | while read -r ws; do
-        check_terraform_drift "$tf_dir" "$repo_name" "$ws" || FAILURE_DETECTED=true
+        check_terraform_drift "$tf_dir" "$repo_name" "$ws" || echo "true" > /tmp/failure_detected.state
       done
     done
   elif [ "$repo_type" = "terragrunt" ]; then
@@ -116,10 +124,14 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while read -r repo; do
       if echo "$tg_dir" | grep -q "\.terragrunt-cache"; then
         continue
       fi
-      check_terragrunt_drift "$tg_dir" "$repo_name" || FAILURE_DETECTED=true
+      check_terragrunt_drift "$tg_dir" "$repo_name" || echo "true" > /tmp/failure_detected.state
     done
   fi
 done
+
+# Read the final state from temp files
+DRIFT_DETECTED=$(cat /tmp/drift_detected.state)
+FAILURE_DETECTED=$(cat /tmp/failure_detected.state)
 
 # Generate report
 if [ -s "$DRIFT_ENTRIES" ]; then
@@ -143,3 +155,6 @@ fi
 # Save state for external consumption
 echo "$DRIFT_DETECTED" > /workspace/drift_detected.txt
 echo "$FAILURE_DETECTED" > /workspace/failure_detected.txt
+
+# Cleanup temp files
+rm -f /tmp/drift_detected.state /tmp/failure_detected.state
