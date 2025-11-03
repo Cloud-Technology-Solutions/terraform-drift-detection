@@ -77,13 +77,13 @@ check_terragrunt_drift() {
   
   cd "$dir"
 
-  if ! terragrunt init -reconfigure -input=false > /dev/null 2>&1; then
+  if ! terragrunt init -input=false > /dev/null 2>&1; then
     echo "Failed to initialize Terragrunt in $dir"
     echo "true" > /tmp/failure_detected.state
     return 1
   fi
 
-  if terragrunt plan -detailed-exitcode -no-color -lock=false -terragrunt-non-interactive > /dev/null 2>&1; then
+  if terragrunt plan -detailed-exitcode -no-color -lock=false --non-interactive > /dev/null 2>&1; then
     return 0
   else
     local exit_code=$?
