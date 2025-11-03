@@ -71,7 +71,7 @@ check_terragrunt_drift() {
   
   cd "$dir"
 
-  if ! terragrunt run init --terragrunt-non-interactive > /dev/null 2>&1; then
+  if ! terragrunt run -- init > /dev/null 2>&1; then
     echo "Failed to initialize Terragrunt in $dir"
     return 1
   fi
