@@ -37,7 +37,7 @@ log_drift() {
     --arg type "$4" \
     '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
     >> "$DRIFT_ENTRIES"
-  echo -e "\n" >> "$DRIFT_ENTRIES"
+  echo -e "\n\n" >> "$DRIFT_ENTRIES"
   echo "true" > /tmp/drift_detected.state
 }
 
@@ -89,7 +89,7 @@ check_terragrunt_drift() {
   else
     local exit_code=$?
     if [ $exit_code -eq 2 ]; then
-      log_drift "$repo" "${rel_path:-(root)}" "default" "terragrunt"
+      log_drift "$repo" "${rel_path:-(root)}" "-" "terragrunt"
       return 0
     else
       echo "Terragrunt plan failed with exit code $exit_code in $dir"
