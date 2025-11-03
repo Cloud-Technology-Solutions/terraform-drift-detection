@@ -83,7 +83,7 @@ check_terragrunt_drift() {
     return 1
   fi
 
-  if terragrunt plan -detailed-exitcode -no-color -lock=false --terragrunt-non-interactive > /dev/null 2>&1; then
+  if terragrunt plan -detailed-exitcode -no-color -lock=false -terragrunt-non-interactive > /dev/null 2>&1; then
     return 0
   else
     local exit_code=$?
