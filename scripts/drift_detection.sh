@@ -4,8 +4,10 @@ set -e
 # Install dependencies
 apk add --no-cache unzip wget jq git openssh-client
   
-# Required to fetch referenced terragrunt modules
-echo "StrictHostKeyChecking no" > ~/.ssh/config
+# Add known hosts (required to fetch referenced terragrunt modules)
+for host in github.com gitlab.com bitbucket.org; do
+  ssh-keyscan -H "$host" >> "${SSH_DIR}/known_hosts" 2>/dev/null || true
+done
 
 # Install Terraform
 wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
@@ -40,12 +42,25 @@ check_terraform_drift() {
   local rel_path="${dir#/workspace/repos/$repo/}"
   
   cd "$dir"
-  terraform init -input=false > /dev/null 2>&1 || return 1
   
-  [ "$workspace" != "default" ] && terraform workspace select "$workspace" > /dev/null 2>&1
+  if [ "$workspace" != "default" ]; then
+    if ! terraform workspace select "$workspace" > /dev/null 2>&1; then
+      echo "Failed to select workspace $workspace in $dir"
+      return 1
+    fi
+  fi
   
-  if ! terraform plan -detailed-exitcode -no-color -lock=false > /dev/null 2>&1; then
-    [ $? -eq 2 ] && log_drift "$repo" "${rel_path:-(root)}" "$workspace" "terraform"
+  if terraform plan -detailed-exitcode -no-color -lock=false > /dev/null 2>&1; then
+    return 0
+  else
+    local exit_code=$?
+    if [ $exit_code -eq 2 ]; then
+      log_drift "$repo" "${rel_path:-(root)}" "$workspace" "terraform"
+      return 0
+    else
+      echo "Terraform plan failed with exit code $exit_code in $dir"
+      return 1
+    fi
   fi
 }
 
@@ -55,10 +70,23 @@ check_terragrunt_drift() {
   local rel_path="${dir#/workspace/repos/$repo/}"
   
   cd "$dir"
-  terragrunt run init --non-interactive || return 1
 
-  if ! terragrunt plan -detailed-exitcode -no-color -lock=false; then
-    [ $? -eq 2 ] log_drift "$repo" "${rel_path:-(root)}" "default" "terragrunt"
+  if ! terragrunt run-all init --terragrunt-non-interactive > /dev/null 2>&1; then
+    echo "Failed to initialize Terragrunt in $dir"
+    return 1
+  fi
+
+  if terragrunt plan -detailed-exitcode -no-color -lock=false > /dev/null 2>&1; then
+    return 0
+  else
+    local exit_code=$?
+    if [ $exit_code -eq 2 ]; then
+      log_drift "$repo" "${rel_path:-(root)}" "default" "terragrunt"
+      return 0
+    else
+      echo "Terragrunt plan failed with exit code $exit_code in $dir"
+      return 1
+    fi
   fi
 }
 
@@ -75,13 +103,19 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while read -r repo; do
   if [ "$repo_type" = "terraform" ]; then
     find "$repo_path" -name "main.tf" -exec dirname {} \; | sort -u | while read -r tf_dir; do
       cd "$tf_dir"
-      terraform init -input=false > /dev/null 2>&1 || continue
+      if ! terraform init -input=false > /dev/null 2>&1; then
+        FAILURE_DETECTED=true
+        continue
+      fi
       terraform workspace list 2>/dev/null | sed 's/^[* ]*//' | awk 'NF' | while read -r ws; do
         check_terraform_drift "$tf_dir" "$repo_name" "$ws" || FAILURE_DETECTED=true
       done
     done
   elif [ "$repo_type" = "terragrunt" ]; then
     find "$repo_path" -name "terragrunt.hcl" -exec dirname {} \; | sort -u | while read -r tg_dir; do
+      if echo "$tg_dir" | grep -q "\.terragrunt-cache"; then
+        continue
+      fi
       check_terragrunt_drift "$tg_dir" "$repo_name" || FAILURE_DETECTED=true
     done
   fi
