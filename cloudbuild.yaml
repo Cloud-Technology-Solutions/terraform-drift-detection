@@ -76,8 +76,8 @@ steps:
         echo "Notification sent successfully"
 
 substitutions:
-  _TERRAFORM_VERSION: '1.5.7'
-  _TERRAGRUNT_VERSION: '0.88.1'
+  _TERRAFORM_VERSION: '1.13.5'
+  _TERRAGRUNT_VERSION: '0.92.1'
 
 options:
   logging: CLOUD_LOGGING_ONLY
