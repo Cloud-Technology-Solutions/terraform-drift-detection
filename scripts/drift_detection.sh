@@ -48,14 +48,14 @@ check_terraform_drift() {
   cd "$dir"
   
   if [ "$workspace" != "default" ]; then
-    if ! terraform workspace select "$workspace" > /dev/null 2>&1; then
+    if ! terraform workspace select "$workspace"; then
       echo "Failed to select workspace $workspace in $dir"
       echo "true" > /tmp/failure_detected.state
       return 1
     fi
   fi
   
-  if terraform plan -detailed-exitcode -no-color -lock=false > /dev/null 2>&1; then
+  if terraform plan -detailed-exitcode -no-color -lock=false; then
     return 0
   else
     local exit_code=$?
@@ -82,14 +82,14 @@ check_terragrunt_drift() {
   }
 
   # Initialize Terragrunt
-  if ! terragrunt init -input=false >/dev/null 2>&1; then
+  if ! terragrunt init -input=false; then
     echo "Terragrunt init failed in $dir"
     echo "true" > /tmp/failure_detected.state
     return 1
   fi
 
   # Run plan and capture exit code
-  terragrunt plan -detailed-exitcode -no-color -lock=false --non-interactive >/dev/null 2>&1
+  terragrunt plan -detailed-exitcode -no-color -lock=false --non-interactive
   local exit_code=$?
 
   case $exit_code in
@@ -118,7 +118,7 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while read -r repo; do
   if [ "$repo_type" = "terraform" ]; then
     find "$repo_path" -name "main.tf" -exec dirname {} \; | sort -u | while read -r tf_dir; do
       cd "$tf_dir"
-      if ! terraform init -input=false > /dev/null 2>&1; then
+      if ! terraform init -input=false; then
         echo "true" > /tmp/failure_detected.state
         continue
       fi
