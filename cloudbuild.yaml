@@ -55,8 +55,8 @@ steps:
           DRIFT_COUNT=$(echo "$$DRIFT_REPORT" | jq 'length')
           DRIFT_DETAILS=$(
             echo "$$DRIFT_REPORT" | jq -r '.[] |
-              "• <b>Repo:</b> \(.repository)<br><b>Path:</b> \(.path)<br><b>Workspace:</b> \(.workspace)<br><b>Type:</b> \(.type)"' |
-              tr '\n' ' ' | sed 's/<br> /<br>/g'
+              "• <b>Repo:</b> \(.repository)<br>&nbsp;&nbsp;<b>Path:</b> \(.path)<br>&nbsp;&nbsp;<b>Workspace:</b> \(.workspace)<br>&nbsp;&nbsp;<b>Type:</b> \(.type)<br>"' |
+              tr -d '\n'
           )
 
           jinja2 notifications/templates/drift.json.j2 \
@@ -76,8 +76,8 @@ steps:
         echo "Notification sent successfully"
 
 substitutions:
-  _TERRAFORM_VERSION: '1.5.7'
-  _TERRAGRUNT_VERSION: '0.88.1'
+  _TERRAFORM_VERSION: '1.13.5'
+  _TERRAGRUNT_VERSION: '0.92.1'
 
 options:
   logging: CLOUD_LOGGING_ONLY

@@ -2,7 +2,12 @@
 set -e
 
 # Install dependencies
-apk add --no-cache unzip wget jq
+apk add --no-cache unzip wget jq git openssh-client
+  
+# Add known hosts (required to fetch referenced terragrunt modules)
+for host in github.com gitlab.com bitbucket.org; do
+  ssh-keyscan -H "$host" >> "${SSH_DIR}/known_hosts" 2>/dev/null || true
+done
 
 # Install Terraform
 wget -qO /tmp/terraform.zip https://releases.hashicorp.com/terraform/${_TERRAFORM_VERSION}/terraform_${_TERRAFORM_VERSION}_linux_amd64.zip
@@ -19,6 +24,10 @@ FAILURE_DETECTED=false
 DRIFT_ENTRIES="/tmp/drift_entries.ndjson"
 > "$DRIFT_ENTRIES"
 
+# Create temp files to track state across subshells
+echo "false" > /tmp/drift_detected.state
+echo "false" > /tmp/failure_detected.state
+
 # Log drift entry
 log_drift() {
   jq -n \
@@ -28,7 +37,7 @@ log_drift() {
     --arg type "$4" \
     '{repository: $repo, path: $path, workspace: $workspace, type: $type}' \
     >> "$DRIFT_ENTRIES"
-  DRIFT_DETECTED=true
+  echo "true" > /tmp/drift_detected.state
 }
 
 # Run terraform plan with drift detection
@@ -37,12 +46,27 @@ check_terraform_drift() {
   local rel_path="${dir#/workspace/repos/$repo/}"
   
   cd "$dir"
-  terraform init -input=false > /dev/null 2>&1 || return 1
   
-  [ "$workspace" != "default" ] && terraform workspace select "$workspace" > /dev/null 2>&1
+  if [ "$workspace" != "default" ]; then
+    if ! terraform workspace select "$workspace"; then
+      echo "Failed to select workspace $workspace in $dir"
+      echo "true" > /tmp/failure_detected.state
+      return 1
+    fi
+  fi
   
-  if ! terraform plan -detailed-exitcode -no-color > /dev/null 2>&1; then
-    [ $? -eq 2 ] && log_drift "$repo" "${rel_path:-(root)}" "$workspace" "terraform"
+  if terraform plan -detailed-exitcode -no-color -lock=false; then
+    return 0
+  else
+    local exit_code=$?
+    if [ $exit_code -eq 2 ]; then
+      log_drift "$repo" "${rel_path:-(root)}" "$workspace" "terraform"
+      return 0
+    else
+      echo "Terraform plan failed with exit code $exit_code in $dir"
+      echo "true" > /tmp/failure_detected.state
+      return 1
+    fi
   fi
 }
 
@@ -50,13 +74,35 @@ check_terraform_drift() {
 check_terragrunt_drift() {
   local dir="$1" repo="$2"
   local rel_path="${dir#/workspace/repos/$repo/}"
-  
-  cd "$dir"
-  terragrunt init -input=false > /dev/null 2>&1 || return 1
-  
-  if ! terragrunt plan -detailed-exitcode -no-color > /dev/null 2>&1; then
-    [ $? -eq 2 ] && log_drift "$repo" "${rel_path:-(root)}" "default" "terragrunt"
+
+  cd "$dir" || {
+    echo "Failed to enter directory: $dir"
+    echo "true" > /tmp/failure_detected.state
+    return 1
+  }
+
+  # Initialize Terragrunt
+  if ! terragrunt init -input=false; then
+    echo "Terragrunt init failed in $dir"
+    echo "true" > /tmp/failure_detected.state
+    return 1
   fi
+
+  # Run plan and capture exit code
+  terragrunt plan -detailed-exitcode -no-color -lock=false --non-interactive
+  local exit_code=$?
+
+  case $exit_code in
+    0)  # No drift
+        return 0 ;;
+    2)  # Drift detected
+        log_drift "$repo" "${rel_path:-(root)}" "-" "terragrunt"
+        return 0 ;;
+    *)  # Error
+        echo "Terragrunt plan failed with exit code $exit_code in $dir"
+        echo "true" > /tmp/failure_detected.state
+        return 1 ;;
+  esac
 }
 
 # Process repositories
@@ -67,32 +113,48 @@ echo "${_REPOSITORIES}" | jq -c '.[]' | while read -r repo; do
   
   echo "Checking $repo_name ($repo_type)..."
   
-  [ ! -d "$repo_path" ] && { echo "Path not found: $repo_path"; FAILURE_DETECTED=true; continue; }
+  [ ! -d "$repo_path" ] && { echo "Path not found: $repo_path"; echo "true" > /tmp/failure_detected.state; continue; }
   
   if [ "$repo_type" = "terraform" ]; then
     find "$repo_path" -name "main.tf" -exec dirname {} \; | sort -u | while read -r tf_dir; do
       cd "$tf_dir"
-      terraform init -input=false > /dev/null 2>&1 || continue
+      if ! terraform init -input=false; then
+        echo "true" > /tmp/failure_detected.state
+        continue
+      fi
       terraform workspace list 2>/dev/null | sed 's/^[* ]*//' | awk 'NF' | while read -r ws; do
-        check_terraform_drift "$tf_dir" "$repo_name" "$ws" || FAILURE_DETECTED=true
+        check_terraform_drift "$tf_dir" "$repo_name" "$ws" || echo "true" > /tmp/failure_detected.state
       done
     done
   elif [ "$repo_type" = "terragrunt" ]; then
     find "$repo_path" -name "terragrunt.hcl" -exec dirname {} \; | sort -u | while read -r tg_dir; do
-      check_terragrunt_drift "$tg_dir" "$repo_name" || FAILURE_DETECTED=true
+      if echo "$tg_dir" | grep -q "\.terragrunt-cache"; then
+        continue
+      fi
+      check_terragrunt_drift "$tg_dir" "$repo_name" || echo "true" > /tmp/failure_detected.state
     done
   fi
 done
 
+# Read the final state from temp files
+DRIFT_DETECTED=$(cat /tmp/drift_detected.state)
+FAILURE_DETECTED=$(cat /tmp/failure_detected.state)
+
 # Generate report
-jq -s '.' "$DRIFT_ENTRIES" > /workspace/drift_report.json
+if [ -s "$DRIFT_ENTRIES" ]; then
+  jq -s '.' "$DRIFT_ENTRIES" > /workspace/drift_report.json
+else
+  echo "[]" > /workspace/drift_report.json
+fi
 
 # Summary
 echo ""
 echo "=== Drift Detection Summary ==="
-if [ -s "$DRIFT_ENTRIES" ]; then
+if [ "$DRIFT_DETECTED" = "true" ]; then
   echo "⚠️  DRIFT DETECTED:"
-  jq -r '.[] | "  - \(.repository)/\(.path) [\(.workspace)]"' /workspace/drift_report.json
+  if [ -s "/workspace/drift_report.json" ]; then
+    jq -r '.[] | "  - \(.repository)/\(.path) [\(.workspace)] (\(.type))"' /workspace/drift_report.json
+  fi
 else
   echo "✓ No drift detected"
 fi
@@ -100,3 +162,6 @@ fi
 # Save state for external consumption
 echo "$DRIFT_DETECTED" > /workspace/drift_detected.txt
 echo "$FAILURE_DETECTED" > /workspace/failure_detected.txt
+
+# Cleanup temp files
+rm -f /tmp/drift_detected.state /tmp/failure_detected.state
